@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: lolita-laundry
+  profiles:
+    active: dev   # override to 'prod' on Oracle Cloud VM

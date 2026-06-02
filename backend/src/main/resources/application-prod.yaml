@@ -1,0 +1,27 @@
+# ── Production profile ──
+# Oracle Cloud ARM VM — set via environment variables, never hardcode secrets
+
+spring:
+  datasource:
+    url: ${DB_URL}   # Neon.tech JDBC URL e.g. jdbc:postgresql://ep-xxx.neon.tech/lolita_laundry?sslmode=require
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+
+spring.security.oauth2.resourceserver.jwt:
+  issuer-uri: https://YOUR_PROD_TENANT.auth0.com/
+
+# Cloudflare R2
+app:
+  storage:
+    endpoint: https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+    access-key: ${R2_ACCESS_KEY}
+    secret-key: ${R2_SECRET_KEY}
+    bucket: lolita-laundry
+    region: auto
+    path-style-access: true

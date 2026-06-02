@@ -1,0 +1,58 @@
+# ── Project knowledge — kept in GitHub Wiki, not in repo ──
+*.md
+!README.md
+
+# ── Environment & secrets ──
+.env
+*.env
+application-local.yaml
+docker-compose.override.yml
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ──
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+*.suo
+*.user
+
+# ── Backend (Spring Boot / Gradle) ──
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/out/
+!backend/gradle/wrapper/gradle-wrapper.jar
+!backend/**/src/main/**/build/
+!backend/**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# ── Frontend (React / Vite / Node) ──
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.vercel/
+
+# ── Logs ──
+*.log
+logs/

@@ -1,0 +1,30 @@
+# ── Development profile ──
+# Backing services provided by docker-compose.yml
+# Run: docker compose up -d
+# Then: ./gradlew bootRun
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/lolita_laundry
+    username: lolita
+    password: lolita_dev
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema — Hibernate only validates
+  flyway:
+    enabled: true
+
+# Auth0 — use your dev tenant (same Auth0 free account)
+spring.security.oauth2.resourceserver.jwt:
+  issuer-uri: https://YOUR_DEV_TENANT.auth0.com/
+
+# Cloudflare R2 → MinIO in dev (S3-compatible, same code)
+app:
+  storage:
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket: lolita-laundry
+    region: us-east-1   # MinIO ignores this but AWS SDK requires a value
+    path-style-access: true   # required for MinIO
