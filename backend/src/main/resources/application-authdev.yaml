@@ -1,0 +1,36 @@
+# ── Local Auth0 testing profile ──
+# Same backing services as dev (local Postgres + MinIO + the dev seed), BUT the
+# profile name is not 'dev', so the real SecurityConfig (@Profile("!dev")) is active:
+# Auth0 JWTs are validated against the tenant's JWKS and OWNER/STAFF roles are enforced.
+#
+# Run: SPRING_PROFILES_ACTIVE=authdev ./gradlew bootRun
+# Use this to verify the full auth chain locally before deploying with the prod profile.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/lolita_laundry
+    username: lolita
+    password: lolita_dev
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration,classpath:db/seed   # includes the dev OWNER seed
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://dev-orcxwn2q35kltpyb.us.auth0.com/
+          audiences: https://api.lolita-laundry.com
+
+# Storage → MinIO (same as dev)
+app:
+  storage:
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket: lolita-laundry
+    region: us-east-1
+    path-style-access: true

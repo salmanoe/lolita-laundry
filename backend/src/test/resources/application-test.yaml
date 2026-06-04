@@ -1,0 +1,33 @@
+# ── Test profile ──
+# Replaces all external services with in-process stubs so tests run without Docker.
+
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;NON_KEYWORDS=VALUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop   # Hibernate builds the schema from @Entity classes
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false            # Flyway migrations are PostgreSQL-specific, skip in tests
+
+# Auth0 JWT — use jwk-set-uri instead of issuer-uri.
+# issuer-uri triggers an HTTP fetch of the OIDC discovery doc at context startup time
+# (before any test runs), which fails without network access. jwk-set-uri defers
+# the JWK fetch until the first JWT is actually validated — never during unit tests.
+spring.security.oauth2.resourceserver.jwt:
+  jwk-set-uri: http://localhost:0/.well-known/jwks.json
+
+# Storage — not actually called during unit/module tests
+app:
+  storage:
+    endpoint: http://localhost:9000
+    access-key: test
+    secret-key: test
+    bucket: test-bucket
+    region: us-east-1
+    path-style-access: true

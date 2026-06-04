@@ -1,21 +1,23 @@
 # Lolita Laundry
 
-Web-based SaaS for **Lolita Laundry**, a laundry vendor in Bandung, Indonesia. Replaces Google Form + AppSheet + Google Sheets with a unified system for managing orders, tracking deliveries, and generating invoices across multiple client businesses.
+Web-based SaaS for **Lolita Laundry**, a laundry vendor in Bandung, Indonesia. Replaces Google Form + AppSheet + Google
+Sheets with a unified system for managing orders, tracking deliveries, and generating invoices across multiple client
+businesses.
 
 ---
 
 ## Tech Stack
 
-| Layer | Choice |
-|---|---|
-| Backend | Spring Boot 4.0.x · Spring Modulith · Hexagonal Architecture |
-| JDK | Eclipse Temurin 25 |
-| Build | Gradle Kotlin DSL |
-| Auth | Auth0 |
-| Database | PostgreSQL (Neon.tech) |
-| File storage | Cloudflare R2 |
-| Frontend | React 19 + Vite → Vercel |
-| Hosting | Oracle Cloud Always Free ARM |
+| Layer        | Choice                                                       |
+|--------------|--------------------------------------------------------------|
+| Backend      | Spring Boot 4.0.x · Spring Modulith · Hexagonal Architecture |
+| JDK          | Eclipse Temurin 25                                           |
+| Build        | Gradle Kotlin DSL                                            |
+| Auth         | Auth0                                                        |
+| Database     | PostgreSQL (Neon.tech)                                       |
+| File storage | Cloudflare R2                                                |
+| Frontend     | React 19 + Vite → Vercel                                     |
+| Hosting      | Oracle Cloud Always Free ARM                                 |
 
 ---
 

@@ -14,10 +14,21 @@ spring:
       ddl-auto: validate   # Flyway owns the schema — Hibernate only validates
   flyway:
     enabled: true
+    # Adds the dev-only seed (db/seed/R__dev_seed.sql) on top of the real migrations.
+    # Production uses only classpath:db/migration (Flyway's default), so it never seeds.
+    locations: classpath:db/migration,classpath:db/seed
 
-# Auth0 — use your dev tenant (same Auth0 free account)
-spring.security.oauth2.resourceserver.jwt:
-  issuer-uri: https://YOUR_DEV_TENANT.auth0.com/
+# ── Security ─────────────────────────────────────────────────────────────────
+# The dev profile activates DevSecurityConfig, which permits ALL requests with no
+# JWT enforcement (see user/adapter/in/security/DevSecurityConfig — @Profile("dev")).
+# This is what lets the frontend run against the backend before real users are
+# provisioned. There is no property toggle — security mode is chosen by Spring profile:
+#   dev  → DevSecurityConfig (permit all)
+#   prod → SecurityConfig    (Auth0 JWT required, see application-prod.yaml issuer-uri)
+#
+# To exercise REAL Auth0 JWT validation locally, run with the prod profile instead
+# (SPRING_PROFILES_ACTIVE=prod) and supply the prod env vars. The Auth0 tenant is:
+#   issuer-uri: https://dev-orcxwn2q35kltpyb.us.auth0.com/
 
 # Cloudflare R2 → MinIO in dev (S3-compatible, same code)
 app:

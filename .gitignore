@@ -5,6 +5,8 @@
 # ── Environment & secrets ──
 .env
 *.env
+.env*.local
+auth0-domain.txt
 application-local.yaml
 docker-compose.override.yml
 

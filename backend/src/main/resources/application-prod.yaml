@@ -14,7 +14,10 @@ spring:
     enabled: true
 
 spring.security.oauth2.resourceserver.jwt:
-  issuer-uri: https://YOUR_PROD_TENANT.auth0.com/
+  issuer-uri: https://dev-orcxwn2q35kltpyb.us.auth0.com/
+  # The API identifier you set in Auth0 (Applications → APIs → Identifier).
+  # Spring validates the JWT 'aud' claim against this. Set AUTH0_AUDIENCE on the VM.
+  audiences: ${AUTH0_AUDIENCE}
 
 # Cloudflare R2
 app:
