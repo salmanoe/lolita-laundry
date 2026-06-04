@@ -60,6 +60,10 @@ dependencies {
     // ── AWS SDK v2 — S3-compatible (MinIO in dev, Cloudflare R2 in prod) ──
     implementation("software.amazon.awssdk:s3")
 
+    // ── Bucket4j — in-memory per-IP rate limiting for the public order endpoints ──
+    // Bucket4j 8.10+ ships JDK-specific core artifacts; the jdk17 build runs on Temurin 25.
+    implementation("com.bucket4j:bucket4j_jdk17-core:8.14.0")
+
     // ── Lombok — reduces boilerplate on DTOs and config beans ──
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")

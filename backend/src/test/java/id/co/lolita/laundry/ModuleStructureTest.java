@@ -8,6 +8,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAnyPackage;
+
 /**
  * Two-layer architecture verification — no Spring context required.
  *
@@ -46,11 +49,16 @@ class ModuleStructureTest {
 
     @Test
     void domainClassesShouldNotDependOnSpringOrJpa() {
+        // Spring Modulith named-interface annotations (@NamedInterface on a port package's
+        // package-info) are compile-time metadata only — like Lombok, they leave no runtime
+        // dependency in the bytecode — so they are the one permitted Spring import in domain.
         ArchRuleDefinition.noClasses()
                 .that().resideInAPackage("..domain..")
-                .should().dependOnClassesThat()
-                .resideInAnyPackage("org.springframework..", "jakarta.persistence..")
-                .because("Domain classes must be pure Java — no Spring or JPA imports")
+                .should().dependOnClassesThat(
+                        resideInAnyPackage("org.springframework..", "jakarta.persistence..")
+                                .and(not(resideInAnyPackage("org.springframework.modulith.."))))
+                .because("Domain classes must be pure Java — no Spring or JPA imports "
+                        + "(Spring Modulith named-interface metadata excepted)")
                 .check(classes);
     }
 

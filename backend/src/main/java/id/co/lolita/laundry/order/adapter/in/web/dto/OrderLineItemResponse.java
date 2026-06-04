@@ -1,0 +1,18 @@
+package id.co.lolita.laundry.order.adapter.in.web.dto;
+
+import id.co.lolita.laundry.order.domain.OrderLineItem;
+
+import java.math.BigDecimal;
+
+public record OrderLineItemResponse(
+        Long id,
+        Long itemId,
+        BigDecimal quantity,
+        BigDecimal priceAtOrder,
+        BigDecimal subtotal
+) {
+    public static OrderLineItemResponse from(OrderLineItem li) {
+        return new OrderLineItemResponse(li.getId(), li.getItemId(), li.getQuantity(),
+                li.getPriceAtOrder(), li.getSubtotal());
+    }
+}
