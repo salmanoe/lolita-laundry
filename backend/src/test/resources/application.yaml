@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: lolita-laundry
+  profiles:
+    active: test   # always override to 'test' when running under Gradle test task

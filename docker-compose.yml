@@ -1,5 +1,7 @@
 services:
 
+  # ── Backing services (always start these first) ──────────────────────────────
+
   postgres:
     image: postgres:17-alpine
     container_name: lolita-postgres
@@ -12,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lolita -d lolita_laundry"]
+      test: [ "CMD-SHELL", "pg_isready -U lolita -d lolita_laundry" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -25,17 +27,16 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"   # S3 API (used by Spring Boot)
-      - "9001:9001"   # MinIO web console
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # MinIO web console  →  http://localhost:9001
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # MinIO bucket init — runs once, creates the app bucket
   minio-init:
     image: minio/mc:latest
     container_name: lolita-minio-init
@@ -51,6 +52,71 @@ services:
       "
     restart: "no"
 
+  # ── Application services ──────────────────────────────────────────────────────
+  #
+  # Both backend and frontend are in the "app" profile so you can choose:
+  #
+  #   docker compose up                   → backing services only (postgres + minio)
+  #   docker compose --profile app up     → full stack (backing + backend + frontend)
+  #
+  # Typical dev workflow: run backing services via Docker, then run backend and
+  # frontend natively for hot reload. Use --profile app when you want to verify
+  # the full stack in one command (e.g. before a PR).
+
+  backend:
+    profiles: [ "app" ]
+    image: eclipse-temurin:25-jdk
+    container_name: lolita-backend
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - gradle_cache:/root/.gradle
+    command: ./gradlew bootRun
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      # Override host-specific properties so they resolve to container names
+      # instead of localhost (which would point back to the backend container itself).
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/lolita_laundry
+      APP_STORAGE_ENDPOINT: http://minio:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:8080/actuator/health || exit 1" ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 90s   # Gradle + Spring Boot cold start can take a while
+
+  frontend:
+    profiles: [ "app" ]
+    image: node:22-alpine
+    container_name: lolita-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    # npm install is idempotent; the node_modules volume caches deps across restarts.
+    command: sh -c "npm install --prefer-offline && npm run dev"
+    ports:
+      - "5173:5173"   # Vite dev server  →  http://localhost:5173
+    environment:
+      # Proxy target: Vite forwards /api/* to the backend container by name.
+      VITE_BACKEND_PROXY_URL: http://backend:8080
+      # Auth0 values — copy from frontend/.env.local or set in a .env file at repo root.
+      # docker compose reads a .env file automatically if present.
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:-YOUR_DEV_TENANT.auth0.com}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:-YOUR_SPA_CLIENT_ID}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE:-https://api.lolita-laundry.com}
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
   minio_data:
+  gradle_cache:
+  frontend_node_modules:
