@@ -1,6 +1,5 @@
 package id.co.lolita.laundry.order.domain.port.in;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -21,8 +20,12 @@ public interface GetOrderFormUseCase {
         public record DepartmentLine(Long id, String name) {
         }
 
-        /** {@code price} is null when the client has no price set for the item yet. */
-        public record ItemLine(Long itemId, String name, Long unitId, Long categoryId, BigDecimal price) {
+        /**
+         * Only items the client has a current price for appear on the form. The price value
+         * itself is intentionally NOT exposed — hotel staff submit quantities, not prices.
+         */
+        public record ItemLine(Long itemId, String name, Long unitId, String unitName,
+                               Long categoryId, String categoryName) {
         }
     }
 

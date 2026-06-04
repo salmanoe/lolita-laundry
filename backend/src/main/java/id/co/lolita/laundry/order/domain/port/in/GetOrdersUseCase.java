@@ -18,4 +18,9 @@ public interface GetOrdersUseCase {
     List<OrderStatusHistory> getHistory(Long orderId);
 
     Optional<DeliveryConfirmation> getDelivery(Long orderId);
+
+    /**
+     * Short-lived pre-signed URL for the delivery photo, so the frontend can render it directly.
+     */
+    Optional<String> getDeliveryPhotoUrl(Long orderId);
 }

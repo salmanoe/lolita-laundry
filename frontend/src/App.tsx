@@ -8,12 +8,20 @@ import ClientsPage from './pages/ClientsPage'
 import ClientDetailPage from './pages/ClientDetailPage'
 import ItemsPage from './pages/ItemsPage'
 import MasterDataPage from './pages/MasterDataPage'
+import OrdersPage from './pages/OrdersPage'
+import OrderDetailPage from './pages/OrderDetailPage'
+import PublicOrderPage from './pages/PublicOrderPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    // Public tokenized order form — no Auth0 session required
+    path: '/order/:token',
+    element: <PublicOrderPage />,
   },
   {
     // All routes inside here require a valid Auth0 session
@@ -24,7 +32,8 @@ const router = createBrowserRouter([
       { path: 'clients/:id', element: <ClientDetailPage /> },
       { path: 'items',       element: <ItemsPage /> },
       { path: 'master-data', element: <MasterDataPage /> },
-      // Phase 2 routes (orders, delivery) go here
+      { path: 'orders',      element: <OrdersPage /> },
+      { path: 'orders/:id',  element: <OrderDetailPage /> },
     ],
   },
   {

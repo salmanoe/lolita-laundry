@@ -12,7 +12,8 @@ import java.util.Optional;
  */
 public interface CatalogQuery {
 
-    record CatalogItemSnapshot(Long id, String name, Long unitId, Long categoryId) {
+    record CatalogItemSnapshot(Long id, String name, Long unitId, String unitName,
+                               Long categoryId, String categoryName) {
     }
 
     List<CatalogItemSnapshot> activeItems();

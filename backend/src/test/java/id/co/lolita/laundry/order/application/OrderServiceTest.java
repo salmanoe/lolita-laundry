@@ -81,7 +81,7 @@ class OrderServiceTest {
 
     private void stubPricingForItem10() {
         when(catalogGateway.findActiveById(10L))
-                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, 1L)));
+                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs", 1L, "Bed Linen")));
         when(pricingGateway.effectivePrice(eq(1L), eq(10L), any()))
                 .thenReturn(Optional.of(new BigDecimal("5000")));
     }
@@ -219,5 +219,25 @@ class OrderServiceTest {
         verify(photoStorage).store(eq("photos/AYI-20260101-001.jpg"), any(), eq("image/jpeg"));
         verify(orderRepository).save(any());     // order advanced to DELIVER
         verify(historyRepository).save(any());
+    }
+
+    @Test
+    void getPublicOrderForm_showsOnlyTheClientsPricedItems_withUnitAndCategoryNames() {
+        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        // Client has a price only for item 10; item 20 is active but unpriced for this client.
+        when(pricingGateway.currentPrices(1L)).thenReturn(List.of(
+                new PricingGateway.ItemPrice(10L, new BigDecimal("5000"))));
+        when(catalogGateway.activeItems()).thenReturn(List.of(
+                new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs", 1L, "Bed Linen"),
+                new CatalogGateway.CatalogItem(20L, "Bath Towel", 2L, "Lembar", 2L, "Bath")));
+
+        var view = service.getPublicOrderForm(TOKEN);
+
+        assertThat(view.items()).singleElement().satisfies(item -> {
+            assertThat(item.itemId()).isEqualTo(10L);          // unpriced item 20 is excluded
+            assertThat(item.name()).isEqualTo("Sheet King");
+            assertThat(item.unitName()).isEqualTo("Pcs");
+            assertThat(item.categoryName()).isEqualTo("Bed Linen");
+        });
     }
 }

@@ -99,6 +99,12 @@ class OrderController {
                 .orElseThrow(() -> new NotFoundException("No delivery confirmation for order " + id));
     }
 
+    @GetMapping("/{id}/delivery/photo-url")
+    PhotoUrlResponse getDeliveryPhotoUrl(@PathVariable Long id) {
+        return new PhotoUrlResponse(ordersQuery.getDeliveryPhotoUrl(id)
+                .orElseThrow(() -> new NotFoundException("No delivery photo for order " + id)));
+    }
+
     @PostMapping(path = "/{id}/delivery", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     DeliveryConfirmationResponse deliver(

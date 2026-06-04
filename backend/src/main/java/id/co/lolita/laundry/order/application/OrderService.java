@@ -32,6 +32,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
     private static final BigDecimal TREATMENT_MULTIPLIER = new BigDecimal("2.0");
     private static final DateTimeFormatter ORDER_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private static final int PHOTO_URL_TTL_SECONDS = 900;   // 15 min — long enough to view, short enough to not leak
 
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
@@ -56,9 +57,14 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         Map<Long, BigDecimal> prices = pricingGateway.currentPrices(client.id()).stream()
                 .collect(Collectors.toMap(PricingGateway.ItemPrice::itemId, PricingGateway.ItemPrice::pricePerUnit));
 
+        // Only items the client has a price for (its Daftar Harga) appear on the order form —
+        // an unpriced item can't be ordered (order creation rejects it), so don't show it. The
+        // price value is used only to filter; it is never exposed on the public form.
         List<OrderFormView.ItemLine> items = catalogGateway.activeItems().stream()
+                .filter(it -> prices.containsKey(it.id()))
                 .map(it -> new OrderFormView.ItemLine(
-                        it.id(), it.name(), it.unitId(), it.categoryId(), prices.get(it.id())))
+                        it.id(), it.name(), it.unitId(), it.unitName(),
+                        it.categoryId(), it.categoryName()))
                 .toList();
 
         return new OrderFormView(client.id(), client.name(), client.clientCode(),
@@ -113,6 +119,15 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     public Optional<DeliveryConfirmation> getDelivery(Long orderId) {
         loadOrder(orderId);
         return deliveryRepository.findByOrderId(orderId);
+    }
+
+    @Override
+    public Optional<String> getDeliveryPhotoUrl(Long orderId) {
+        loadOrder(orderId);
+        return deliveryRepository.findByOrderId(orderId)
+                .map(DeliveryConfirmation::getPhotoUrl)
+                .filter(key -> !key.isBlank())
+                .map(key -> photoStorage.presignedUrl(key, PHOTO_URL_TTL_SECONDS));
     }
 
     // ── UpdateOrderUseCase ──

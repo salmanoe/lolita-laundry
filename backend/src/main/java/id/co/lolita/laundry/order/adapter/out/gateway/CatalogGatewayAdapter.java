@@ -25,6 +25,6 @@ class CatalogGatewayAdapter implements CatalogGateway {
     }
 
     private static CatalogItem toItem(CatalogQuery.CatalogItemSnapshot s) {
-        return new CatalogItem(s.id(), s.name(), s.unitId(), s.categoryId());
+        return new CatalogItem(s.id(), s.name(), s.unitId(), s.unitName(), s.categoryId(), s.categoryName());
     }
 }

@@ -56,3 +56,98 @@ export interface PriceListEntry {
   pricePerUnit: number
   effectiveDate: string   // ISO date string
 }
+
+// ── Orders (Phase 2) ──────────────────────────────────────────────────────────
+
+/** One-way lifecycle: RECEIVED → PROCESSING → DONE → DELIVERED. */
+export type OrderStatus = 'RECEIVED' | 'PROCESSING' | 'DONE' | 'DELIVERED'
+
+/** Public order-form payload — mirrors OrderFormResponse. */
+export interface OrderForm {
+  clientId:           number
+  clientName:         string
+  clientCode:         string
+  perDepartment:      boolean
+  treatmentAvailable: boolean
+  departments:        { id: number; name: string }[]
+  items:              OrderFormItem[]
+}
+
+export interface OrderFormItem {
+  itemId:       number
+  name:         string
+  unitId:       number
+  unitName:     string | null
+  categoryId:   number
+  categoryName: string | null
+  // Public order-form items omit price (never exposed to hotel staff). The authenticated
+  // staff edit screen builds OrderFormItem locally and sets this for its price preview.
+  price?:       number
+}
+
+/** One line being submitted (price resolved server-side). */
+export interface OrderLineRequest {
+  itemId:   number
+  quantity: number
+}
+
+export interface OrderLineItem {
+  id:           number
+  itemId:       number
+  quantity:     number
+  priceAtOrder: number
+  subtotal:     number
+}
+
+/** Full order detail — mirrors OrderResponse. */
+export interface Order {
+  id:                number
+  orderNumber:       string
+  clientId:          number
+  departmentId:      number | null
+  orderDate:         string   // ISO date
+  dueDate:           string | null
+  status:            OrderStatus
+  pricingMultiplier: number
+  submittedByName:   string | null
+  notes:             string | null
+  createdByUserId:   number | null
+  createdAt:         string   // ISO instant
+  total:             number
+  lineItems:         OrderLineItem[]
+}
+
+/** Lightweight list row — mirrors OrderSummaryResponse. */
+export interface OrderSummary {
+  id:                number
+  orderNumber:       string
+  clientId:          number
+  departmentId:      number | null
+  orderDate:         string
+  dueDate:           string | null
+  status:            OrderStatus
+  pricingMultiplier: number
+  submittedByName:   string | null
+  total:             number
+  createdAt:         string
+}
+
+export interface StatusHistoryEntry {
+  id:              number
+  orderId:         number
+  fromStatus:      OrderStatus | null
+  toStatus:        OrderStatus
+  changedByUserId: number | null
+  changedAt:       string
+  notes:           string | null
+}
+
+export interface DeliveryConfirmation {
+  id:            number
+  orderId:       number
+  deliveredAt:   string
+  recipientName: string
+  delivererName: string
+  photoUrl:      string | null
+  notes:         string | null
+}

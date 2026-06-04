@@ -8,7 +8,8 @@ import java.util.Optional;
  */
 public interface CatalogGateway {
 
-    record CatalogItem(Long id, String name, Long unitId, Long categoryId) {
+    record CatalogItem(Long id, String name, Long unitId, String unitName,
+                       Long categoryId, String categoryName) {
     }
 
     List<CatalogItem> activeItems();
