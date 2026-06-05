@@ -1,6 +1,8 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import AuthGuard from './auth/AuthGuard'
 import Layout from './components/Layout'
+import DriverLayout from './components/DriverLayout'
+import DeliveriesPage from './pages/DeliveriesPage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ClientsPage from './pages/ClientsPage'
@@ -24,7 +26,13 @@ const router = createBrowserRouter([
     element: <PublicOrderPage />,
   },
   {
-    // All routes inside here require a valid Auth0 session
+    // Driver delivery app — minimal shell, no admin sidebar. DriverLayout bounces non-drivers to '/'.
+    path: '/deliveries',
+    element: <AuthGuard><DriverLayout /></AuthGuard>,
+    children: [{ index: true, element: <DeliveriesPage /> }],
+  },
+  {
+    // All routes inside here require a valid Auth0 session. Layout redirects DRIVER users to /deliveries.
     element: <AuthGuard><Layout /></AuthGuard>,
     children: [
       { index: true,         element: <DashboardPage /> },

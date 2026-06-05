@@ -28,7 +28,8 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, CreateOrderUseCase,
-        GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, DeliverOrderUseCase {
+        GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, DeliverOrderUseCase,
+        AssignDriverUseCase, GetDriverDeliveriesUseCase {
 
     private static final BigDecimal TREATMENT_MULTIPLIER = new BigDecimal("2.0");
     private static final DateTimeFormatter ORDER_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -41,6 +42,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private final DepartmentGateway departmentGateway;
     private final PricingGateway pricingGateway;
     private final CatalogGateway catalogGateway;
+    private final DriverGateway driverGateway;
     private final PhotoStoragePort photoStorage;
 
     // ── GetOrderFormUseCase ──
@@ -189,6 +191,51 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         historyRepository.save(OrderStatusHistory.record(
                 order.getId(), from, OrderStatus.DELIVERED, command.byUserId(), "Order delivered", Instant.now()));
         return saved;
+    }
+
+    // ── AssignDriverUseCase ──
+
+    @Override
+    @Transactional
+    public Order assignDriver(AssignDriverCommand command) {
+        var order = loadOrder(command.orderId());
+        if (command.driverId() != null && !driverGateway.isActiveDriver(command.driverId())) {
+            throw new IllegalArgumentException("Not an active driver: " + command.driverId());
+        }
+        order.assignDriver(command.driverId());   // null = unassign
+        return orderRepository.save(order);
+    }
+
+    // ── GetDriverDeliveriesUseCase ──
+
+    @Override
+    public List<DriverDeliveryView> getAssignedDeliveries(Long driverId) {
+        if (driverId == null) {
+            return List.of();
+        }
+        return orderRepository.findActiveAssignments(driverId).stream()
+                .map(this::toDriverView)
+                .toList();
+    }
+
+    private DriverDeliveryView toDriverView(Order order) {
+        String clientName = clientGateway.findById(order.getClientId())
+                .map(ClientSnapshot::name).orElse("—");
+        String departmentName = order.getDepartmentId() == null ? null
+                : departmentGateway.activeForClient(order.getClientId()).stream()
+                .filter(d -> d.id().equals(order.getDepartmentId()))
+                .map(DepartmentGateway.DepartmentSnapshot::name)
+                .findFirst().orElse(null);
+
+        var lines = order.getLineItems().stream().map(li -> {
+            var item = catalogGateway.findActiveById(li.getItemId());
+            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.getItemId());
+            String unit = item.map(CatalogGateway.CatalogItem::unitName).orElse(null);
+            return new DriverLine(name, unit, li.getQuantity());
+        }).toList();
+
+        return new DriverDeliveryView(order.getId(), order.getOrderNumber(), clientName, departmentName,
+                order.getOrderDate(), order.getDueDate(), order.getStatus(), order.getNotes(), lines);
     }
 
     // ── helpers ──

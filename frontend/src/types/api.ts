@@ -1,6 +1,22 @@
 // ── Shared API response types ─────────────────────────────────────────────────
 // These mirror the backend DTOs. Keep in sync with the Java record definitions.
 
+/** Lolita user roles. Hotel staff are not users (they use tokenized public links). */
+export type Role = 'OWNER' | 'STAFF' | 'DRIVER'
+
+/** Current authenticated user — mirrors MeResponse. Drives role-aware routing. */
+export interface Me {
+  id:       number
+  fullName: string
+  role:     Role
+}
+
+/** A driver option for the staff assignment picker — mirrors DriverResponse. */
+export interface Driver {
+  id:       number
+  fullName: string
+}
+
 /** Paged list response — mirrors the backend shared.Page record. `page` is 0-based. */
 export interface Page<T> {
   content: T[]
@@ -112,6 +128,7 @@ export interface Order {
   submittedByName:   string | null
   notes:             string | null
   createdByUserId:   number | null
+  assignedDriverId:  number | null
   createdAt:         string   // ISO instant
   total:             number
   lineItems:         OrderLineItem[]
@@ -128,6 +145,7 @@ export interface OrderSummary {
   status:            OrderStatus
   pricingMultiplier: number
   submittedByName:   string | null
+  assignedDriverId:  number | null
   total:             number
   createdAt:         string
 }
@@ -150,4 +168,26 @@ export interface DeliveryConfirmation {
   delivererName: string
   photoUrl:      string | null
   notes:         string | null
+}
+
+// ── Driver delivery (Phase 2 extension) ────────────────────────────────────────
+
+/** One line on a driver's delivery — price-free by design (no unit price / subtotal). */
+export interface DriverDeliveryLine {
+  itemName: string
+  unitName: string | null
+  quantity: number
+}
+
+/** An assigned order as a driver sees it — mirrors DriverDeliveryResponse. No prices. */
+export interface DriverDelivery {
+  orderId:        number
+  orderNumber:    string
+  clientName:     string
+  departmentName: string | null
+  orderDate:      string
+  dueDate:        string | null
+  status:         OrderStatus
+  notes:          string | null
+  lines:          DriverDeliveryLine[]
 }

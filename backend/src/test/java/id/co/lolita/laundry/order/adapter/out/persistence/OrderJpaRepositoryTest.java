@@ -47,6 +47,28 @@ class OrderJpaRepositoryTest {
     }
 
     @Test
+    void findActiveAssignments_excludesDeliveredAndOtherDrivers_readyFirst() {
+        var today = LocalDate.now();
+        var processing = order("AYI-1", 1L, today, OrderStatus.PROCESSING);
+        processing.setAssignedDriverId(7L);
+        var ready = order("AYI-2", 1L, today, OrderStatus.DONE);
+        ready.setAssignedDriverId(7L);
+        var delivered = order("AYI-3", 1L, today, OrderStatus.DELIVERED);
+        delivered.setAssignedDriverId(7L);
+        var otherDriver = order("AYI-4", 1L, today, OrderStatus.DONE);
+        otherDriver.setAssignedDriverId(8L);
+        repository.save(processing);
+        repository.save(ready);
+        repository.save(delivered);
+        repository.save(otherDriver);
+
+        var result = repository.findActiveAssignments(7L);
+
+        assertThat(result).extracting(OrderJpaEntity::getOrderNumber)
+                .containsExactly("AYI-2", "AYI-1");   // DONE (ready) first; DELIVERED + other driver excluded
+    }
+
+    @Test
     void search_appliesOnlyTheSuppliedFilters() {
         var today = LocalDate.now();
         repository.save(order("AYI-1", 1L, today, OrderStatus.RECEIVED));
@@ -64,7 +86,7 @@ class OrderJpaRepositoryTest {
         // Client + status filter.
         var received = repository.search(1L, OrderStatus.RECEIVED, null, null, pageable);
         assertThat(received.getTotalElements()).isEqualTo(1);
-        assertThat(received.getContent().get(0).getOrderNumber()).isEqualTo("AYI-1");
+        assertThat(received.getContent().getFirst().getOrderNumber()).isEqualTo("AYI-1");
 
         // Date window that excludes today.
         assertThat(repository.search(null, null, null, today.minusDays(1), pageable).getTotalElements())

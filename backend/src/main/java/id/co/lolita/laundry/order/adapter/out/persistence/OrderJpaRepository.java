@@ -8,10 +8,24 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 
 interface OrderJpaRepository extends JpaRepository<OrderJpaEntity, Long> {
 
     long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate);
+
+    /**
+     * A driver's open assignments — not yet DELIVERED. Ordered ready-first (DONE on top),
+     * then by oldest order date so the longest-waiting deliveries surface first.
+     */
+    @Query("""
+            SELECT o FROM OrderJpaEntity o
+            WHERE o.assignedDriverId = :driverId
+              AND o.status <> id.co.lolita.laundry.order.domain.OrderStatus.DELIVERED
+            ORDER BY CASE WHEN o.status = id.co.lolita.laundry.order.domain.OrderStatus.DONE THEN 0 ELSE 1 END,
+                     o.orderDate ASC
+            """)
+    List<OrderJpaEntity> findActiveAssignments(@Param("driverId") Long driverId);
 
     /**
      * Lists orders with optional filters — any null parameter drops its constraint.

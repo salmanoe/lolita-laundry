@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useMe } from '../auth/useMe'
 import { BasketIcon, HomeIcon, HotelIcon, SlidersIcon, TowelsIcon } from './NavIcons'
 
 const navItems = [
@@ -19,6 +20,7 @@ function initials(name?: string) {
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const meQ = useMe()
   const [menuOpen, setMenuOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -32,6 +34,11 @@ export default function Layout() {
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [menuOpen])
+
+  // Drivers have no admin access — send them to their delivery screen.
+  if (meQ.data?.role === 'DRIVER') {
+    return <Navigate to="/deliveries" replace />
+  }
 
   return (
     <div className="flex h-screen bg-gray-50">

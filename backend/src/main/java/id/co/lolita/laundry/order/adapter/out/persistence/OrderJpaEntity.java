@@ -56,13 +56,18 @@ class OrderJpaEntity {
     @Column(name = "created_by_user_id")
     private Long createdByUserId;
 
+    @Column(name = "assigned_driver_id")
+    private Long assignedDriverId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderLineItemJpaEntity> lineItems = new ArrayList<>();
 
-    /** Builds a fresh, unsaved entity (used for new orders) including its line items. */
+    /**
+     * Builds a fresh, unsaved entity (used for new orders) including its line items.
+     */
     static OrderJpaEntity newFromDomain(Order o) {
         var e = new OrderJpaEntity();
         e.id = o.getId();
@@ -78,12 +83,15 @@ class OrderJpaEntity {
         return e;
     }
 
-    /** Copies the fields that may change over an order's life onto a managed entity. */
+    /**
+     * Copies the fields that may change over an order's life onto a managed entity.
+     */
     void applyScalars(Order o) {
         this.status = o.getStatus();
         this.dueDate = o.getDueDate();
         this.notes = o.getNotes();
         this.departmentId = o.getDepartmentId();
+        this.assignedDriverId = o.getAssignedDriverId();
     }
 
     /**
@@ -114,6 +122,6 @@ class OrderJpaEntity {
     Order toDomain() {
         var lines = lineItems.stream().map(OrderLineItemJpaEntity::toDomain).toList();
         return new Order(id, orderNumber, clientId, departmentId, orderDate, dueDate, status,
-                pricingMultiplier, submittedByName, notes, createdByUserId, createdAt, lines);
+                pricingMultiplier, submittedByName, notes, createdByUserId, assignedDriverId, createdAt, lines);
     }
 }

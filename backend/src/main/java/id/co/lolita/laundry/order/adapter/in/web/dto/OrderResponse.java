@@ -8,7 +8,9 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
-/** Full order detail, including line items. */
+/**
+ * Full order detail, including line items.
+ */
 public record OrderResponse(
         Long id,
         String orderNumber,
@@ -21,6 +23,7 @@ public record OrderResponse(
         String submittedByName,
         String notes,
         Long createdByUserId,
+        Long assignedDriverId,
         Instant createdAt,
         BigDecimal total,
         List<OrderLineItemResponse> lineItems
@@ -29,7 +32,8 @@ public record OrderResponse(
         return new OrderResponse(
                 o.getId(), o.getOrderNumber(), o.getClientId(), o.getDepartmentId(),
                 o.getOrderDate(), o.getDueDate(), o.getStatus(), o.getPricingMultiplier(),
-                o.getSubmittedByName(), o.getNotes(), o.getCreatedByUserId(), o.getCreatedAt(),
+                o.getSubmittedByName(), o.getNotes(), o.getCreatedByUserId(), o.getAssignedDriverId(),
+                o.getCreatedAt(),
                 o.total(),
                 o.getLineItems().stream().map(OrderLineItemResponse::from).toList()
         );

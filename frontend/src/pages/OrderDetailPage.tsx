@@ -9,6 +9,7 @@ import type {
   Client,
   DeliveryConfirmation,
   Department,
+  Driver,
   Item,
   Order,
   StatusHistoryEntry,
@@ -158,6 +159,9 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
+      {/* Driver assignment */}
+      <DriverAssignment order={order} />
+
       {/* Delivery */}
       <DeliverySection orderId={orderId} order={order} />
 
@@ -187,6 +191,70 @@ export default function OrderDetailPage() {
         onClose={() => setEditOpen(false)}
       />
     </div>
+  )
+}
+
+/** Staff assign the order to a driver (or unassign). Locked once DELIVERED. */
+function DriverAssignment({ order }: { order: Order }) {
+  const { getAccessTokenSilently } = useAuth()
+  const qc = useQueryClient()
+  const token = async () => getAccessTokenSilently()
+
+  const driversQ = useQuery({
+    queryKey: ['drivers'],
+    queryFn: async () => apiFetch<Driver[]>('/api/drivers', { token: await token() }),
+  })
+
+  const assign = useMutation({
+    mutationFn: async (driverId: number | null) =>
+      apiFetch<Order>(`/api/orders/${order.id}/assignment`, {
+        method: 'PATCH',
+        token: await token(),
+        body: JSON.stringify({ driverId }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['order', order.id] }),
+  })
+
+  const drivers = driversQ.data ?? []
+  const assignedName = drivers.find((d) => d.id === order.assignedDriverId)?.fullName
+
+  return (
+    <section>
+      <h2 className="mb-3 text-base font-semibold text-gray-800">Driver Pengiriman</h2>
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-white p-6 text-sm shadow-sm">
+        {order.status === 'DELIVERED' ? (
+          <p className="text-gray-600">
+            Ditugaskan ke: <span className="font-medium text-gray-800">{assignedName ?? '—'}</span>
+          </p>
+        ) : (
+          <>
+            <label className="text-xs font-medium text-gray-500">Tugaskan ke</label>
+            <select
+              value={order.assignedDriverId ?? ''}
+              disabled={assign.isPending || driversQ.isLoading}
+              onChange={(e) => assign.mutate(e.target.value ? Number(e.target.value) : null)}
+              className="min-w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+            >
+              <option value="">— Belum ditugaskan —</option>
+              {drivers.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.fullName}
+                </option>
+              ))}
+            </select>
+            {assign.isPending && <span className="text-xs text-gray-400">Menyimpan…</span>}
+            {!driversQ.isLoading && drivers.length === 0 && (
+              <span className="text-xs text-gray-400">Belum ada driver terdaftar.</span>
+            )}
+          </>
+        )}
+        {assign.error && (
+          <p className="w-full text-sm text-red-500">
+            {assign.error instanceof ApiError ? assign.error.detail : 'Gagal menugaskan driver.'}
+          </p>
+        )}
+      </div>
+    </section>
   )
 }
 

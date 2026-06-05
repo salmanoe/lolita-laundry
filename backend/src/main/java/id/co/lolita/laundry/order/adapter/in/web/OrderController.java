@@ -39,6 +39,7 @@ class OrderController {
     private final UpdateOrderUseCase updateOrder;
     private final UpdateOrderStatusUseCase updateStatus;
     private final DeliverOrderUseCase deliverOrder;
+    private final AssignDriverUseCase assignDriver;
     private final CurrentUserResolver currentUser;
 
     @GetMapping
@@ -85,6 +86,12 @@ class OrderController {
         var command = new AdvanceStatusCommand(
                 id, request.status(), currentUser.currentUserId(authentication), request.notes());
         return OrderResponse.from(updateStatus.advanceStatus(command));
+    }
+
+    @PatchMapping("/{id}/assignment")
+    OrderResponse assign(@PathVariable Long id, @RequestBody AssignmentRequest request) {
+        return OrderResponse.from(
+                assignDriver.assignDriver(new AssignDriverUseCase.AssignDriverCommand(id, request.driverId())));
     }
 
     @GetMapping("/{id}/history")

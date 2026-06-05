@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -47,6 +48,12 @@ class OrderJpaAdapter implements OrderRepository {
                 springPage.getNumber(), springPage.getSize(),
                 springPage.getTotalElements(), springPage.getTotalPages()
         );
+    }
+
+    @Override
+    public List<Order> findActiveAssignments(Long driverId) {
+        return jpaRepository.findActiveAssignments(driverId).stream()
+                .map(OrderJpaEntity::toDomain).toList();
     }
 
     @Override

@@ -65,9 +65,11 @@ FROM (VALUES
 JOIN client_types t ON t.code = v.type_code
 ON CONFLICT (client_code) DO NOTHING;
 
--- ── Dev OWNER (the Auth0 user used for local JWT testing — see the 'authdev' profile) ──
+-- ── Dev users (real Auth0 subs for the dev tenant — used for local JWT testing under the 'authdev' profile) ──
 INSERT INTO users (auth0_sub, full_name, role) VALUES
-    ('auth0|6a20cc8b4ae1221e278dacaa', 'Salman Manoe', 'OWNER')
+    ('auth0|6a20cc8b4ae1221e278dacaa', 'Salman Manoe',   'OWNER'),
+    ('auth0|6a2216426125bcfe9e007abb', 'Staff Lolita',   'STAFF'),
+    ('auth0|6a221661719be467f9f13430', 'Joko Pengantar', 'DRIVER')
 ON CONFLICT (auth0_sub) DO NOTHING;
 
 -- ── PBS departments (only PBS uses PER_DEPARTMENT billing) ──
