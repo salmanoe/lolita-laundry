@@ -21,6 +21,7 @@ export default function ClientDetailPage() {
   const [editClient, setEditClient] = useState(false)
   const [deptForm, setDeptForm] = useState<{ open: boolean; department?: Department }>({ open: false })
   const [priceForm, setPriceForm] = useState<{ open: boolean; presetItemId?: number }>({ open: false })
+  const [copied, setCopied] = useState(false)
 
   const token = async () => getAccessTokenSilently()
 
@@ -67,12 +68,25 @@ export default function ClientDetailPage() {
               {client.active ? 'Aktif' : 'Nonaktif'}
             </span>
           </div>
-          <button
-            onClick={() => setEditClient(true)}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Ubah Info
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={async () => {
+                const link = `${window.location.origin}/order/${client.orderToken}`
+                await navigator.clipboard.writeText(link)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 2000)
+              }}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {copied ? '✓ Tersalin' : 'Salin Tautan Order'}
+            </button>
+            <button
+              onClick={() => setEditClient(true)}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Ubah Info
+            </button>
+          </div>
         </div>
       </div>
 

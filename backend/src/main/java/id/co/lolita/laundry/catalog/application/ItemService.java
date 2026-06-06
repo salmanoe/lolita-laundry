@@ -1,6 +1,9 @@
 package id.co.lolita.laundry.catalog.application;
 
+import id.co.lolita.laundry.catalog.domain.ItemCategory;
 import id.co.lolita.laundry.catalog.domain.ItemMaster;
+import id.co.lolita.laundry.catalog.domain.ItemUnit;
+import id.co.lolita.laundry.catalog.domain.port.in.CatalogQuery;
 import id.co.lolita.laundry.catalog.domain.port.in.GetItemsUseCase;
 import id.co.lolita.laundry.catalog.domain.port.in.ManageItemUseCase;
 import id.co.lolita.laundry.catalog.domain.port.out.ItemCategoryRepository;
@@ -14,11 +17,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-class ItemService implements GetItemsUseCase, ManageItemUseCase {
+class ItemService implements GetItemsUseCase, ManageItemUseCase, CatalogQuery {
 
     private final ItemRepository itemRepository;
     private final ItemUnitRepository unitRepository;
@@ -32,6 +37,33 @@ class ItemService implements GetItemsUseCase, ManageItemUseCase {
     @Override
     public List<ItemMaster> getActiveItems() {
         return itemRepository.findAllActive();
+    }
+
+    // ── CatalogQuery (cross-module read API) ──
+
+    @Override
+    public List<CatalogItemSnapshot> activeItems() {
+        var unitNames = unitRepository.findAll().stream()
+                .collect(Collectors.toMap(ItemUnit::getId, ItemUnit::getDisplayName));
+        var categoryNames = categoryRepository.findAll().stream()
+                .collect(Collectors.toMap(ItemCategory::getId, ItemCategory::getDisplayName));
+        return itemRepository.findAllActive().stream()
+                .map(item -> toSnapshot(item, unitNames.get(item.getUnitId()), categoryNames.get(item.getCategoryId())))
+                .toList();
+    }
+
+    @Override
+    public Optional<CatalogItemSnapshot> findActiveById(Long itemId) {
+        return itemRepository.findById(itemId)
+                .filter(ItemMaster::isActive)
+                .map(item -> toSnapshot(item,
+                        unitRepository.findById(item.getUnitId()).map(ItemUnit::getDisplayName).orElse(null),
+                        categoryRepository.findById(item.getCategoryId()).map(ItemCategory::getDisplayName).orElse(null)));
+    }
+
+    private static CatalogItemSnapshot toSnapshot(ItemMaster item, String unitName, String categoryName) {
+        return new CatalogItemSnapshot(item.getId(), item.getName(),
+                item.getUnitId(), unitName, item.getCategoryId(), categoryName);
     }
 
     @Override

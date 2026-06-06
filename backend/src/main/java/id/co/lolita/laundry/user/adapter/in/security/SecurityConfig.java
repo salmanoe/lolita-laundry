@@ -1,5 +1,6 @@
 package id.co.lolita.laundry.user.adapter.in.security;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -30,6 +31,9 @@ class SecurityConfig {
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .cors(withDefaults())   // uses the CorsConfigurationSource bean from CorsConfig
                 .authorizeHttpRequests(auth -> auth
+                        // Let Spring's internal error dispatch reach /error without a JWT; otherwise any
+                        // exception on a permitAll endpoint is re-dispatched to /error and masked as a 401.
+                        .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         // Public order submission (no authentication — hotel staff use token in URL)
                         .requestMatchers(HttpMethod.GET, "/public/order-form/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/public/orders/**").permitAll()

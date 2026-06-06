@@ -32,11 +32,14 @@ const BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const { token, headers, ...rest } = options
 
+  // Let the browser set Content-Type (incl. the multipart boundary) for FormData bodies.
+  const isFormData = typeof FormData !== 'undefined' && rest.body instanceof FormData
+
   const response = await fetch(`${BASE}${path}`, {
     ...rest,
     headers: {
-      // Only declare a JSON body when one is actually sent (skip on GET/DELETE)
-      ...(rest.body ? { 'Content-Type': 'application/json' } : {}),
+      // Only declare a JSON body when one is actually sent (skip on GET/DELETE and multipart)
+      ...(rest.body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },

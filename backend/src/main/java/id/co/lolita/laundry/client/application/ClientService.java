@@ -1,5 +1,6 @@
 package id.co.lolita.laundry.client.application;
 
+import id.co.lolita.laundry.client.domain.BillingMode;
 import id.co.lolita.laundry.client.domain.Client;
 import id.co.lolita.laundry.client.domain.ClientPriceList;
 import id.co.lolita.laundry.client.domain.Department;
@@ -15,15 +16,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepartmentUseCase, ManagePriceListUseCase {
+class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepartmentUseCase,
+        ManagePriceListUseCase, ClientDirectoryQuery, ClientPricingQuery {
 
     private final ClientRepository clientRepository;
     private final DepartmentRepository departmentRepository;
@@ -139,5 +143,52 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
                 Instant.now()
         );
         return priceListRepository.save(entry);
+    }
+
+    // ── ClientDirectoryQuery (cross-module read API) ──
+
+    @Override
+    public Optional<ClientView> findByToken(UUID token) {
+        return clientRepository.findByOrderToken(token).map(ClientService::toView);
+    }
+
+    @Override
+    public Optional<ClientView> findById(Long clientId) {
+        return clientRepository.findById(clientId).map(ClientService::toView);
+    }
+
+    @Override
+    public List<DepartmentView> activeDepartments(Long clientId) {
+        return departmentRepository.findByClientId(clientId).stream()
+                .filter(Department::isActive)
+                .map(d -> new DepartmentView(d.getId(), d.getName()))
+                .toList();
+    }
+
+    @Override
+    public boolean departmentBelongsToClient(Long departmentId, Long clientId) {
+        return departmentRepository.findById(departmentId)
+                .filter(d -> d.getClientId().equals(clientId))
+                .isPresent();
+    }
+
+    private static ClientView toView(Client c) {
+        return new ClientView(c.getId(), c.getName(), c.getClientCode(),
+                c.isActive(), c.getBillingMode() == BillingMode.PER_DEPARTMENT);
+    }
+
+    // ── ClientPricingQuery (cross-module read API) ──
+
+    @Override
+    public Optional<BigDecimal> effectivePrice(Long clientId, Long itemId, LocalDate asOf) {
+        return priceListRepository.findEffectivePrice(clientId, itemId, asOf)
+                .map(ClientPriceList::pricePerUnit);
+    }
+
+    @Override
+    public List<PricePoint> currentPrices(Long clientId) {
+        return priceListRepository.findCurrentPrices(clientId).stream()
+                .map(p -> new PricePoint(p.itemId(), p.pricePerUnit()))
+                .toList();
     }
 }

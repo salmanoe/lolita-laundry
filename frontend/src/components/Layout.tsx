@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useMe } from '../auth/useMe'
+import { BasketIcon, HomeIcon, HotelIcon, SlidersIcon, TowelsIcon } from './NavIcons'
 
 const navItems = [
-  { to: '/',        label: 'Dasbor', icon: '🏠' },
-  { to: '/clients', label: 'Klien',  icon: '🏨' },
-  { to: '/items',   label: 'Item',   icon: '📋' },
-  { to: '/master-data', label: 'Master Data', icon: '⚙️' },
-  // Phase 2: { to: '/orders', label: 'Order', icon: '📦' },
+  { to: '/',        label: 'Dasbor', Icon: HomeIcon },
+  { to: '/clients', label: 'Klien',  Icon: HotelIcon },
+  { to: '/orders',  label: 'Order',  Icon: BasketIcon },
+  { to: '/items',   label: 'Item',   Icon: TowelsIcon },
+  { to: '/master-data', label: 'Master Data', Icon: SlidersIcon },
 ]
 
 function initials(name?: string) {
@@ -18,6 +20,7 @@ function initials(name?: string) {
 
 export default function Layout() {
   const { user, logout } = useAuth()
+  const meQ = useMe()
   const [menuOpen, setMenuOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -32,6 +35,11 @@ export default function Layout() {
     return () => document.removeEventListener('mousedown', onDown)
   }, [menuOpen])
 
+  // Drivers have no admin access — send them to their delivery screen.
+  if (meQ.data?.role === 'DRIVER') {
+    return <Navigate to="/deliveries" replace />
+  }
+
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Mobile drawer backdrop */}
@@ -40,33 +48,32 @@ export default function Layout() {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-white shadow-sm transition-transform duration-200 md:static md:z-auto md:w-56 md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col bg-gradient-to-b from-brand-800 via-brand-700 to-brand-500 text-white shadow-sm transition-transform duration-200 md:static md:z-auto md:w-56 md:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <NavLink
           to="/"
           onClick={() => setSidebarOpen(false)}
-          className="flex h-16 items-center gap-2 px-4 font-bold text-brand-700 transition-colors hover:text-brand-800"
+          className="flex items-center justify-center px-4 pt-6 pb-4 transition-opacity hover:opacity-90"
         >
-          <img src="/favicon.png" alt="Logo Lolita Laundry" className="h-8 w-8 rounded" />
-          Lolita Laundry
+          <img src="/logo-white.png" alt="Logo Lolita Laundry" className="h-24 w-auto" />
         </NavLink>
 
         {/* Profile (top) — click to reveal the Keluar menu */}
-        <div ref={menuRef} className="relative border-b px-3 py-3">
+        <div ref={menuRef} className="relative border-b border-white/10 px-3 py-3">
           <button
             onClick={() => setMenuOpen((o) => !o)}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-gray-100"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-white/10"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-700">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-sm font-semibold text-white">
               {initials(user?.name)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-gray-700">{user?.name}</p>
-              <p className="truncate text-xs text-gray-400">{user?.email}</p>
+              <p className="truncate text-xs font-medium text-white">{user?.name}</p>
+              <p className="truncate text-xs text-blue-200/70">{user?.email}</p>
             </div>
-            <span className={`text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`}>▾</span>
+            <span className={`text-white/60 transition-transform ${menuOpen ? 'rotate-180' : ''}`}>▾</span>
           </button>
 
           {menuOpen && (
@@ -85,9 +92,9 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 px-3 py-4">
-          <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Menu</p>
+          <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-200/60">Menu</p>
           <div className="space-y-1">
-            {navItems.map(({ to, label, icon }) => (
+            {navItems.map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -96,22 +103,22 @@ export default function Layout() {
                 className={({ isActive }) =>
                   `group flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-brand-50 text-brand-700 shadow-sm'
-                      : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'
+                      ? 'bg-white/15 text-white shadow-sm'
+                      : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
                     <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-base transition-colors ${
-                        isActive ? 'bg-white shadow-sm' : 'bg-gray-100 group-hover:bg-gray-200'
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                        isActive ? 'bg-white/20' : 'bg-white/10 group-hover:bg-white/20'
                       }`}
                     >
-                      {icon}
+                      <Icon className="h-[18px] w-[18px]" />
                     </span>
                     <span>{label}</span>
-                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-500" />}
+                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand-300" />}
                   </>
                 )}
               </NavLink>
