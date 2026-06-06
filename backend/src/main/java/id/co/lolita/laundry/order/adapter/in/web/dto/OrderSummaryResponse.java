@@ -20,7 +20,6 @@ public record OrderSummaryResponse(
         OrderStatus status,
         BigDecimal pricingMultiplier,
         String submittedByName,
-        Long assignedDriverId,
         BigDecimal total,
         Instant createdAt
 ) {
@@ -28,7 +27,7 @@ public record OrderSummaryResponse(
         return new OrderSummaryResponse(
                 o.getId(), o.getOrderNumber(), o.getClientId(), o.getDepartmentId(),
                 o.getOrderDate(), o.getDueDate(), o.getStatus(), o.getPricingMultiplier(),
-                o.getSubmittedByName(), o.getAssignedDriverId(), o.total(), o.getCreatedAt()
+                o.getSubmittedByName(), o.total(), o.getCreatedAt()
         );
     }
 }

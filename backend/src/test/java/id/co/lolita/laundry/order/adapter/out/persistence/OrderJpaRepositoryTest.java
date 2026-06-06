@@ -47,25 +47,19 @@ class OrderJpaRepositoryTest {
     }
 
     @Test
-    void findActiveAssignments_excludesDeliveredAndOtherDrivers_readyFirst() {
+    void findOpenDeliveries_returnsAllNonDelivered_readyFirst() {
         var today = LocalDate.now();
-        var processing = order("AYI-1", 1L, today, OrderStatus.PROCESSING);
-        processing.setAssignedDriverId(7L);
-        var ready = order("AYI-2", 1L, today, OrderStatus.DONE);
-        ready.setAssignedDriverId(7L);
-        var delivered = order("AYI-3", 1L, today, OrderStatus.DELIVERED);
-        delivered.setAssignedDriverId(7L);
-        var otherDriver = order("AYI-4", 1L, today, OrderStatus.DONE);
-        otherDriver.setAssignedDriverId(8L);
-        repository.save(processing);
-        repository.save(ready);
-        repository.save(delivered);
-        repository.save(otherDriver);
+        // Open pool: every order not yet DELIVERED, regardless of which driver (no assignment).
+        repository.save(order("AYI-1", 1L, today, OrderStatus.PROCESSING));
+        repository.save(order("AYI-2", 1L, today.minusDays(1), OrderStatus.DONE));
+        repository.save(order("AYI-3", 1L, today, OrderStatus.DELIVERED));
+        repository.save(order("AYI-4", 2L, today, OrderStatus.DONE));
 
-        var result = repository.findActiveAssignments(7L);
+        var result = repository.findOpenDeliveries();
 
+        // DONE (ready) first ordered by oldest date, then the rest; DELIVERED excluded.
         assertThat(result).extracting(OrderJpaEntity::getOrderNumber)
-                .containsExactly("AYI-2", "AYI-1");   // DONE (ready) first; DELIVERED + other driver excluded
+                .containsExactly("AYI-2", "AYI-4", "AYI-1");
     }
 
     @Test

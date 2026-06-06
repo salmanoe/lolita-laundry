@@ -30,7 +30,6 @@ public class Order {
     private final String submittedByName;
     private String notes;
     private final Long createdByUserId;    // nullable — null when submitted via public token
-    private Long assignedDriverId;         // nullable — set when staff assign the order to a driver
     private final Instant createdAt;
     private final List<OrderLineItem> lineItems = new ArrayList<>();
 
@@ -42,7 +41,7 @@ public class Order {
 
     public Order(Long id, String orderNumber, Long clientId, Long departmentId, LocalDate orderDate,
                  LocalDate dueDate, OrderStatus status, BigDecimal pricingMultiplier, String submittedByName,
-                 String notes, Long createdByUserId, Long assignedDriverId, Instant createdAt,
+                 String notes, Long createdByUserId, Instant createdAt,
                  List<OrderLineItem> lineItems) {
         this.id = id;
         this.orderNumber = orderNumber;
@@ -55,7 +54,6 @@ public class Order {
         this.submittedByName = submittedByName;
         this.notes = notes;
         this.createdByUserId = createdByUserId;
-        this.assignedDriverId = assignedDriverId;
         this.createdAt = createdAt;
         if (lineItems != null) {
             this.lineItems.addAll(lineItems);
@@ -69,23 +67,11 @@ public class Order {
             throw new IllegalArgumentException("Order must have at least one line item");
         }
         var order = new Order(null, orderNumber, clientId, departmentId, orderDate, dueDate,
-                OrderStatus.RECEIVED, pricingMultiplier, submittedByName, notes, createdByUserId, null,
+                OrderStatus.RECEIVED, pricingMultiplier, submittedByName, notes, createdByUserId,
                 createdAt, null);
         lines.forEach(l -> order.lineItems.add(
                 OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), pricingMultiplier)));
         return order;
-    }
-
-    /**
-     * Assigns this order to a driver (or unassigns when {@code driverId} is null). The driver
-     * confirms delivery from their own screen. Rejected once the order is {@code DELIVERED} —
-     * there is nothing left to deliver. The driver's existence/role is validated upstream.
-     */
-    public void assignDriver(Long driverId) {
-        if (status == OrderStatus.DELIVERED) {
-            throw new IllegalArgumentException("A delivered order can no longer be assigned");
-        }
-        this.assignedDriverId = driverId;
     }
 
     /**

@@ -23,7 +23,6 @@ public record OrderResponse(
         String submittedByName,
         String notes,
         Long createdByUserId,
-        Long assignedDriverId,
         Instant createdAt,
         BigDecimal total,
         List<OrderLineItemResponse> lineItems
@@ -32,7 +31,7 @@ public record OrderResponse(
         return new OrderResponse(
                 o.getId(), o.getOrderNumber(), o.getClientId(), o.getDepartmentId(),
                 o.getOrderDate(), o.getDueDate(), o.getStatus(), o.getPricingMultiplier(),
-                o.getSubmittedByName(), o.getNotes(), o.getCreatedByUserId(), o.getAssignedDriverId(),
+                o.getSubmittedByName(), o.getNotes(), o.getCreatedByUserId(),
                 o.getCreatedAt(),
                 o.total(),
                 o.getLineItems().stream().map(OrderLineItemResponse::from).toList()

@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, CreateOrderUseCase,
         GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, DeliverOrderUseCase,
-        AssignDriverUseCase, GetDriverDeliveriesUseCase {
+        GetDriverDeliveriesUseCase {
 
     private static final BigDecimal TREATMENT_MULTIPLIER = new BigDecimal("2.0");
     private static final DateTimeFormatter ORDER_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -42,7 +42,6 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private final DepartmentGateway departmentGateway;
     private final PricingGateway pricingGateway;
     private final CatalogGateway catalogGateway;
-    private final DriverGateway driverGateway;
     private final PhotoStoragePort photoStorage;
 
     // ── GetOrderFormUseCase ──
@@ -193,27 +192,11 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         return saved;
     }
 
-    // ── AssignDriverUseCase ──
-
-    @Override
-    @Transactional
-    public Order assignDriver(AssignDriverCommand command) {
-        var order = loadOrder(command.orderId());
-        if (command.driverId() != null && !driverGateway.isActiveDriver(command.driverId())) {
-            throw new IllegalArgumentException("Not an active driver: " + command.driverId());
-        }
-        order.assignDriver(command.driverId());   // null = unassign
-        return orderRepository.save(order);
-    }
-
     // ── GetDriverDeliveriesUseCase ──
 
     @Override
-    public List<DriverDeliveryView> getAssignedDeliveries(Long driverId) {
-        if (driverId == null) {
-            return List.of();
-        }
-        return orderRepository.findActiveAssignments(driverId).stream()
+    public List<DriverDeliveryView> getOpenDeliveries() {
+        return orderRepository.findOpenDeliveries().stream()
                 .map(this::toDriverView)
                 .toList();
     }

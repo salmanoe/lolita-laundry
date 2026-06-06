@@ -51,8 +51,8 @@ class OrderJpaAdapter implements OrderRepository {
     }
 
     @Override
-    public List<Order> findActiveAssignments(Long driverId) {
-        return jpaRepository.findActiveAssignments(driverId).stream()
+    public List<Order> findOpenDeliveries() {
+        return jpaRepository.findOpenDeliveries().stream()
                 .map(OrderJpaEntity::toDomain).toList();
     }
 

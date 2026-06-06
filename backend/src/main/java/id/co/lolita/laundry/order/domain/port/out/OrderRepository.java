@@ -20,9 +20,10 @@ public interface OrderRepository {
     Page<Order> findAll(OrderQuery query);
 
     /**
-     * A driver's open assignments — orders assigned to them that are not yet DELIVERED.
+     * The open delivery pool — every order not yet DELIVERED, shared across all drivers.
+     * Ready (DONE) orders first, then by oldest order date.
      */
-    List<Order> findActiveAssignments(Long driverId);
+    List<Order> findOpenDeliveries();
 
     /**
      * Count of orders for a client on a date — drives the per-client-per-day sequence number.

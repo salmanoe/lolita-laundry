@@ -11,12 +11,6 @@ export interface Me {
   role:     Role
 }
 
-/** A driver option for the staff assignment picker — mirrors DriverResponse. */
-export interface Driver {
-  id:       number
-  fullName: string
-}
-
 /** Paged list response — mirrors the backend shared.Page record. `page` is 0-based. */
 export interface Page<T> {
   content: T[]
@@ -128,7 +122,6 @@ export interface Order {
   submittedByName:   string | null
   notes:             string | null
   createdByUserId:   number | null
-  assignedDriverId:  number | null
   createdAt:         string   // ISO instant
   total:             number
   lineItems:         OrderLineItem[]
@@ -145,7 +138,6 @@ export interface OrderSummary {
   status:            OrderStatus
   pricingMultiplier: number
   submittedByName:   string | null
-  assignedDriverId:  number | null
   total:             number
   createdAt:         string
 }
@@ -179,7 +171,7 @@ export interface DriverDeliveryLine {
   quantity: number
 }
 
-/** An assigned order as a driver sees it — mirrors DriverDeliveryResponse. No prices. */
+/** An open-pool order as a driver sees it — mirrors DriverDeliveryResponse. No prices. */
 export interface DriverDelivery {
   orderId:        number
   orderNumber:    string

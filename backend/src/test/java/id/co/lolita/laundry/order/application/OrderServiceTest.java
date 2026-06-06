@@ -2,7 +2,6 @@ package id.co.lolita.laundry.order.application;
 
 import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderStatus;
-import id.co.lolita.laundry.order.domain.port.in.AssignDriverUseCase.AssignDriverCommand;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.OrderLineInput;
@@ -13,7 +12,6 @@ import id.co.lolita.laundry.order.domain.port.out.ClientGateway;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
 import id.co.lolita.laundry.order.domain.port.out.DeliveryConfirmationRepository;
 import id.co.lolita.laundry.order.domain.port.out.DepartmentGateway;
-import id.co.lolita.laundry.order.domain.port.out.DriverGateway;
 import id.co.lolita.laundry.order.domain.port.out.OrderRepository;
 import id.co.lolita.laundry.order.domain.port.out.OrderStatusHistoryRepository;
 import id.co.lolita.laundry.order.domain.port.out.PhotoStoragePort;
@@ -64,8 +62,6 @@ class OrderServiceTest {
     @Mock
     CatalogGateway catalogGateway;
     @Mock
-    DriverGateway driverGateway;
-    @Mock
     PhotoStoragePort photoStorage;
     @InjectMocks
     OrderService service;
@@ -78,7 +74,7 @@ class OrderServiceTest {
 
     private Order persisted(OrderStatus status) {
         return new Order(99L, "AYI-20260101-001", 1L, null, LocalDate.now(), null, status,
-                BigDecimal.ONE, "Staff", null, null, null, Instant.now(),
+                BigDecimal.ONE, "Staff", null, null, Instant.now(),
                 List.of(new id.co.lolita.laundry.order.domain.OrderLineItem(
                         500L, 10L, BigDecimal.ONE, new BigDecimal("5000"), new BigDecimal("5000.00"))));
     }
@@ -226,45 +222,13 @@ class OrderServiceTest {
     }
 
     @Test
-    void assignDriver_rejectsNonDriver() {
-        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
-        when(driverGateway.isActiveDriver(5L)).thenReturn(false);
-
-        assertThatThrownBy(() -> service.assignDriver(new AssignDriverCommand(99L, 5L)))
-                .isInstanceOf(IllegalArgumentException.class);
-        verify(orderRepository, never()).save(any());
-    }
-
-    @Test
-    void assignDriver_assignsActiveDriver() {
-        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
-        when(driverGateway.isActiveDriver(5L)).thenReturn(true);
-        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        var result = service.assignDriver(new AssignDriverCommand(99L, 5L));
-
-        assertThat(result.getAssignedDriverId()).isEqualTo(5L);
-    }
-
-    @Test
-    void assignDriver_unassign_skipsDriverValidation() {
-        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
-        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        var result = service.assignDriver(new AssignDriverCommand(99L, null));
-
-        assertThat(result.getAssignedDriverId()).isNull();
-        verify(driverGateway, never()).isActiveDriver(any());
-    }
-
-    @Test
-    void getAssignedDeliveries_mapsToPriceFreeView() {
-        when(orderRepository.findActiveAssignments(7L)).thenReturn(List.of(persisted(OrderStatus.DONE)));
+    void getOpenDeliveries_mapsToPriceFreeView() {
+        when(orderRepository.findOpenDeliveries()).thenReturn(List.of(persisted(OrderStatus.DONE)));
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         when(catalogGateway.findActiveById(10L))
                 .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs", 1L, "Bed Linen")));
 
-        var views = service.getAssignedDeliveries(7L);
+        var views = service.getOpenDeliveries();
 
         assertThat(views).singleElement().satisfies(v -> {
             assertThat(v.orderNumber()).isEqualTo("AYI-20260101-001");

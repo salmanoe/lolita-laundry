@@ -15,17 +15,17 @@ interface OrderJpaRepository extends JpaRepository<OrderJpaEntity, Long> {
     long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate);
 
     /**
-     * A driver's open assignments — not yet DELIVERED. Ordered ready-first (DONE on top),
-     * then by oldest order date so the longest-waiting deliveries surface first.
+     * The open delivery pool — every order not yet DELIVERED, shared across all drivers.
+     * Ordered ready-first (DONE on top), then by oldest order date so the longest-waiting
+     * deliveries surface first.
      */
     @Query("""
             SELECT o FROM OrderJpaEntity o
-            WHERE o.assignedDriverId = :driverId
-              AND o.status <> id.co.lolita.laundry.order.domain.OrderStatus.DELIVERED
+            WHERE o.status <> id.co.lolita.laundry.order.domain.OrderStatus.DELIVERED
             ORDER BY CASE WHEN o.status = id.co.lolita.laundry.order.domain.OrderStatus.DONE THEN 0 ELSE 1 END,
                      o.orderDate ASC
             """)
-    List<OrderJpaEntity> findActiveAssignments(@Param("driverId") Long driverId);
+    List<OrderJpaEntity> findOpenDeliveries();
 
     /**
      * Lists orders with optional filters — any null parameter drops its constraint.

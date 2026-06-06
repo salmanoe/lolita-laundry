@@ -56,9 +56,6 @@ class OrderJpaEntity {
     @Column(name = "created_by_user_id")
     private Long createdByUserId;
 
-    @Column(name = "assigned_driver_id")
-    private Long assignedDriverId;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -91,7 +88,6 @@ class OrderJpaEntity {
         this.dueDate = o.getDueDate();
         this.notes = o.getNotes();
         this.departmentId = o.getDepartmentId();
-        this.assignedDriverId = o.getAssignedDriverId();
     }
 
     /**
@@ -122,6 +118,6 @@ class OrderJpaEntity {
     Order toDomain() {
         var lines = lineItems.stream().map(OrderLineItemJpaEntity::toDomain).toList();
         return new Order(id, orderNumber, clientId, departmentId, orderDate, dueDate, status,
-                pricingMultiplier, submittedByName, notes, createdByUserId, assignedDriverId, createdAt, lines);
+                pricingMultiplier, submittedByName, notes, createdByUserId, createdAt, lines);
     }
 }

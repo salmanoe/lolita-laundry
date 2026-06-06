@@ -22,10 +22,10 @@ export default function DeliveriesPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold text-gray-800">Pengiriman Saya</h1>
+      <h1 className="text-lg font-semibold text-gray-800">Pengiriman</h1>
       {deliveries.length === 0 && (
         <p className="rounded-lg border border-dashed bg-white p-8 text-center text-sm text-gray-400">
-          Tidak ada order yang ditugaskan untuk Anda.
+          Tidak ada order untuk dikirim saat ini.
         </p>
       )}
       {deliveries.map((d) => (

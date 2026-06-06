@@ -1,26 +1,20 @@
 package id.co.lolita.laundry.user.adapter.in.web;
 
-import id.co.lolita.laundry.user.adapter.in.web.dto.DriverResponse;
 import id.co.lolita.laundry.user.adapter.in.web.dto.MeResponse;
 import id.co.lolita.laundry.user.domain.port.in.LoadUserByAuth0SubUseCase;
-import id.co.lolita.laundry.user.domain.port.in.UserDirectoryQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
 /**
  * Authenticated user-directory endpoints.
  *
  * <p>{@code GET /api/me} is open to any authenticated user (every role calls it for
- * role-aware routing); {@code GET /api/drivers} is staff-only (populates the assignment
- * picker). Method-level {@code @PreAuthorize} is enforced in prod via {@code SecurityConfig};
- * the dev profile permits all requests, matching the rest of the app.
+ * role-aware routing). Method-level {@code @PreAuthorize} is enforced in prod via
+ * {@code SecurityConfig}; the dev profile permits all requests, matching the rest of the app.
  */
 @RestController
 @RequestMapping("/api")
@@ -28,7 +22,6 @@ import java.util.List;
 class UserController {
 
     private final LoadUserByAuth0SubUseCase loadUser;
-    private final UserDirectoryQuery directory;
 
     /**
      * The current user's profile. Returns 204 when the caller is unauthenticated (dev) or
@@ -44,11 +37,5 @@ class UserController {
                 .map(MeResponse::from)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
-    }
-
-    @GetMapping("/drivers")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
-    List<DriverResponse> drivers() {
-        return directory.activeDrivers().stream().map(DriverResponse::from).toList();
     }
 }

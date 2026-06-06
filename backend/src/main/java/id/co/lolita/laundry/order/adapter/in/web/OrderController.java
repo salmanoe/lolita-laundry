@@ -39,7 +39,6 @@ class OrderController {
     private final UpdateOrderUseCase updateOrder;
     private final UpdateOrderStatusUseCase updateStatus;
     private final DeliverOrderUseCase deliverOrder;
-    private final AssignDriverUseCase assignDriver;
     private final CurrentUserResolver currentUser;
 
     @GetMapping
@@ -88,12 +87,6 @@ class OrderController {
         return OrderResponse.from(updateStatus.advanceStatus(command));
     }
 
-    @PatchMapping("/{id}/assignment")
-    OrderResponse assign(@PathVariable Long id, @RequestBody AssignmentRequest request) {
-        return OrderResponse.from(
-                assignDriver.assignDriver(new AssignDriverUseCase.AssignDriverCommand(id, request.driverId())));
-    }
-
     @GetMapping("/{id}/history")
     List<StatusHistoryResponse> history(@PathVariable Long id) {
         return ordersQuery.getHistory(id).stream().map(StatusHistoryResponse::from).toList();
@@ -112,6 +105,12 @@ class OrderController {
                 .orElseThrow(() -> new NotFoundException("No delivery photo for order " + id)));
     }
 
+    /**
+     * Staff delivery confirmation. Backend-only fallback — the normal path is the driver app
+     * (`POST /api/deliveries/{id}/confirm`); this is intentionally not surfaced in the staff UI,
+     * kept only so an owner/staff can close an order when no driver is available. Same contract
+     * as the driver endpoint (mandatory photo, order must be at DONE).
+     */
     @PostMapping(path = "/{id}/delivery", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
     DeliveryConfirmationResponse deliver(

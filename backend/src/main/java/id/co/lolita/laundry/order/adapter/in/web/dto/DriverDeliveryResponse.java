@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * An assigned order as a driver sees it. Price-free by design — no unit price, subtotal,
+ * An open-pool order as a driver sees it. Price-free by design — no unit price, subtotal,
  * total, or pricing multiplier is ever sent to a driver.
  */
 public record DriverDeliveryResponse(

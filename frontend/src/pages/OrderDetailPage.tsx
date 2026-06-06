@@ -9,7 +9,6 @@ import type {
   Client,
   DeliveryConfirmation,
   Department,
-  Driver,
   Item,
   Order,
   StatusHistoryEntry,
@@ -159,9 +158,6 @@ export default function OrderDetailPage() {
         </div>
       </section>
 
-      {/* Driver assignment */}
-      <DriverAssignment order={order} />
-
       {/* Delivery */}
       <DeliverySection orderId={orderId} order={order} />
 
@@ -194,80 +190,13 @@ export default function OrderDetailPage() {
   )
 }
 
-/** Staff assign the order to a driver (or unassign). Locked once DELIVERED. */
-function DriverAssignment({ order }: { order: Order }) {
-  const { getAccessTokenSilently } = useAuth()
-  const qc = useQueryClient()
-  const token = async () => getAccessTokenSilently()
-
-  const driversQ = useQuery({
-    queryKey: ['drivers'],
-    queryFn: async () => apiFetch<Driver[]>('/api/drivers', { token: await token() }),
-  })
-
-  const assign = useMutation({
-    mutationFn: async (driverId: number | null) =>
-      apiFetch<Order>(`/api/orders/${order.id}/assignment`, {
-        method: 'PATCH',
-        token: await token(),
-        body: JSON.stringify({ driverId }),
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['order', order.id] }),
-  })
-
-  const drivers = driversQ.data ?? []
-  const assignedName = drivers.find((d) => d.id === order.assignedDriverId)?.fullName
-
-  return (
-    <section>
-      <h2 className="mb-3 text-base font-semibold text-gray-800">Driver Pengiriman</h2>
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-white p-6 text-sm shadow-sm">
-        {order.status === 'DELIVERED' ? (
-          <p className="text-gray-600">
-            Ditugaskan ke: <span className="font-medium text-gray-800">{assignedName ?? '—'}</span>
-          </p>
-        ) : (
-          <>
-            <label className="text-xs font-medium text-gray-500">Tugaskan ke</label>
-            <select
-              value={order.assignedDriverId ?? ''}
-              disabled={assign.isPending || driversQ.isLoading}
-              onChange={(e) => assign.mutate(e.target.value ? Number(e.target.value) : null)}
-              className="min-w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-            >
-              <option value="">— Belum ditugaskan —</option>
-              {drivers.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.fullName}
-                </option>
-              ))}
-            </select>
-            {assign.isPending && <span className="text-xs text-gray-400">Menyimpan…</span>}
-            {!driversQ.isLoading && drivers.length === 0 && (
-              <span className="text-xs text-gray-400">Belum ada driver terdaftar.</span>
-            )}
-          </>
-        )}
-        {assign.error && (
-          <p className="w-full text-sm text-red-500">
-            {assign.error instanceof ApiError ? assign.error.detail : 'Gagal menugaskan driver.'}
-          </p>
-        )}
-      </div>
-    </section>
-  )
-}
-
-/** Delivery: upload form when the order is DONE, read-only confirmation once DELIVERED. */
+/**
+ * Delivery: read-only on the staff screen. Confirmation (photo + recipient/deliverer) happens
+ * in the driver app (/deliveries), never here — staff only view the proof once delivered.
+ */
 function DeliverySection({ orderId, order }: { orderId: number; order: Order }) {
   const { getAccessTokenSilently } = useAuth()
-  const qc = useQueryClient()
   const token = async () => getAccessTokenSilently()
-
-  const [recipient, setRecipient] = useState('')
-  const [deliverer, setDeliverer] = useState('')
-  const [notes, setNotes] = useState('')
-  const [photo, setPhoto] = useState<File | null>(null)
 
   const deliveryQ = useQuery({
     queryKey: ['delivery', orderId],
@@ -281,99 +210,44 @@ function DeliverySection({ orderId, order }: { orderId: number; order: Order }) 
       apiFetch<{ url: string }>(`/api/orders/${orderId}/delivery/photo-url`, { token: await token() }),
   })
 
-  const deliver = useMutation({
-    mutationFn: async () => {
-      const fd = new FormData()
-      fd.append('recipientName', recipient.trim())
-      fd.append('delivererName', deliverer.trim())
-      if (notes.trim()) fd.append('notes', notes.trim())
-      fd.append('photo', photo!)
-      return apiFetch<DeliveryConfirmation>(`/api/orders/${orderId}/delivery`, {
-        method: 'POST',
-        token: await token(),
-        body: fd,
-      })
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['order', orderId] })
-      qc.invalidateQueries({ queryKey: ['order-history', orderId] })
-      qc.invalidateQueries({ queryKey: ['delivery', orderId] })
-    },
-  })
-
   if (order.status === 'RECEIVED' || order.status === 'PROCESSING') return null
 
-  if (order.status === 'DELIVERED') {
-    const d = deliveryQ.data
+  if (order.status === 'DONE') {
     return (
       <section>
         <h2 className="mb-3 text-base font-semibold text-gray-800">Konfirmasi Pengiriman</h2>
-        <div className="grid gap-6 rounded-lg border bg-white p-6 text-sm shadow-sm md:grid-cols-[1fr_auto]">
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
-            <Info label="Nama Penerima" value={d?.recipientName ?? '—'} />
-            <Info label="Nama Pengantar" value={d?.delivererName ?? '—'} />
-            <Info label="Waktu" value={d ? new Date(d.deliveredAt).toLocaleString('id-ID') : '—'} />
-            {d?.notes && <Info label="Catatan" value={d.notes} />}
-          </dl>
-          {photoUrlQ.data?.url && (
-            <a href={photoUrlQ.data.url} target="_blank" rel="noreferrer" className="shrink-0">
-              <img
-                src={photoUrlQ.data.url}
-                alt="Foto pengiriman"
-                className="h-40 w-40 rounded-lg border object-cover"
-              />
-            </a>
-          )}
-        </div>
+        <p className="rounded-lg border border-dashed bg-white p-6 text-center text-sm text-gray-400">
+          Menunggu konfirmasi pengiriman oleh driver.
+        </p>
       </section>
     )
   }
 
-  // status === DONE → upload form
-  const canSubmit = recipient.trim() && deliverer.trim() && photo && !deliver.isPending
+  // status === DELIVERED → read-only proof
+  const d = deliveryQ.data
   return (
     <section>
       <h2 className="mb-3 text-base font-semibold text-gray-800">Konfirmasi Pengiriman</h2>
-      <div className="space-y-4 rounded-lg border bg-white p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Labeled label="Nama Penerima" required>
-            <input value={recipient} onChange={(e) => setRecipient(e.target.value)} className={inputCls} />
-          </Labeled>
-          <Labeled label="Nama Pengantar" required>
-            <input value={deliverer} onChange={(e) => setDeliverer(e.target.value)} className={inputCls} />
-          </Labeled>
-        </div>
-        <Labeled label="Catatan">
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opsional" className={inputCls} />
-        </Labeled>
-        <Labeled label="Foto Bukti" required>
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-4 file:py-2 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
-          />
-        </Labeled>
-        {deliver.error && (
-          <p className="text-sm text-red-500">
-            {deliver.error instanceof ApiError ? deliver.error.detail : 'Gagal menyimpan konfirmasi.'}
-          </p>
+      <div className="grid gap-6 rounded-lg border bg-white p-6 text-sm shadow-sm md:grid-cols-[1fr_auto]">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <Info label="Nama Penerima" value={d?.recipientName ?? '—'} />
+          <Info label="Nama Pengantar" value={d?.delivererName ?? '—'} />
+          <Info label="Waktu" value={d ? new Date(d.deliveredAt).toLocaleString('id-ID') : '—'} />
+          {d?.notes && <Info label="Catatan" value={d.notes} />}
+        </dl>
+        {photoUrlQ.data?.url && (
+          <a href={photoUrlQ.data.url} target="_blank" rel="noreferrer" className="shrink-0">
+            <img
+              src={photoUrlQ.data.url}
+              alt="Foto pengiriman"
+              className="h-40 w-40 rounded-lg border object-cover"
+            />
+          </a>
         )}
-        <button
-          onClick={() => deliver.mutate()}
-          disabled={!canSubmit}
-          className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {deliver.isPending ? 'Menyimpan…' : 'Konfirmasi Terkirim'}
-        </button>
       </div>
     </section>
   )
 }
-
-const inputCls =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
 
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -381,16 +255,5 @@ function Info({ label, value }: { label: string; value: React.ReactNode }) {
       <dt className="text-xs font-medium text-gray-400">{label}</dt>
       <dd className="mt-0.5 text-gray-800">{value}</dd>
     </div>
-  )
-}
-
-function Labeled({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-xs font-medium text-gray-500">
-        {label} {required && <span className="text-red-500">*</span>}
-      </span>
-      {children}
-    </label>
   )
 }
