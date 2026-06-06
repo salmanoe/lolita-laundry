@@ -5,18 +5,21 @@ import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderQuery;
 import id.co.lolita.laundry.order.domain.OrderStatus;
 import id.co.lolita.laundry.order.domain.OrderStatusHistory;
+import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
 import id.co.lolita.laundry.order.domain.port.in.*;
 import id.co.lolita.laundry.order.domain.port.out.*;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
 import id.co.lolita.laundry.shared.NotFoundException;
 import id.co.lolita.laundry.shared.Page;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +32,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, CreateOrderUseCase,
         GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, DeliverOrderUseCase,
-        GetDriverDeliveriesUseCase {
+        GetDriverDeliveriesUseCase, DeliveredOrderQuery {
 
     private static final BigDecimal TREATMENT_MULTIPLIER = new BigDecimal("2.0");
     private static final DateTimeFormatter ORDER_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -43,6 +46,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private final PricingGateway pricingGateway;
     private final CatalogGateway catalogGateway;
     private final PhotoStoragePort photoStorage;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ── GetOrderFormUseCase ──
 
@@ -189,6 +193,12 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         orderRepository.save(order);
         historyRepository.save(OrderStatusHistory.record(
                 order.getId(), from, OrderStatus.DELIVERED, command.byUserId(), "Order delivered", Instant.now()));
+
+        // Notify billing to generate the per-order invoice. Published after the order is saved;
+        // the Modulith JPA registry persists it so the invoice still gets produced if the
+        // listener fails. The listener runs after this transaction commits.
+        eventPublisher.publishEvent(new OrderDeliveredEvent(
+                order.getId(), order.getOrderNumber(), order.getClientId(), saved.getDeliveredAt()));
         return saved;
     }
 
@@ -219,6 +229,43 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
         return new DriverDeliveryView(order.getId(), order.getOrderNumber(), clientName, departmentName,
                 order.getOrderDate(), order.getDueDate(), order.getStatus(), order.getNotes(), lines);
+    }
+
+    // ── DeliveredOrderQuery (consumed by billing) ──
+
+    @Override
+    public Optional<DeliveredOrderDetail> findDeliveredOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .filter(o -> o.getStatus() == OrderStatus.DELIVERED)
+                .map(this::toDeliveredDetail);
+    }
+
+    @Override
+    public List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, int year, int month) {
+        YearMonth ym = YearMonth.of(year, month);
+        return orderRepository.findDeliveredByClientAndPeriod(
+                        clientId, ym.atDay(1), ym.atEndOfMonth()).stream()
+                .map(this::toDeliveredDetail)
+                .toList();
+    }
+
+    private DeliveredOrderDetail toDeliveredDetail(Order order) {
+        String departmentName = order.getDepartmentId() == null ? null
+                : departmentGateway.activeForClient(order.getClientId()).stream()
+                .filter(d -> d.id().equals(order.getDepartmentId()))
+                .map(DepartmentGateway.DepartmentSnapshot::name)
+                .findFirst().orElse(null);
+
+        var lines = order.getLineItems().stream().map(li -> {
+            var item = catalogGateway.findActiveById(li.getItemId());
+            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.getItemId());
+            String unit = item.map(CatalogGateway.CatalogItem::unitName).orElse(null);
+            return new DeliveredLine(name, unit, li.getQuantity(), li.getPriceAtOrder(), li.getSubtotal());
+        }).toList();
+
+        return new DeliveredOrderDetail(order.getId(), order.getOrderNumber(), order.getClientId(),
+                order.getDepartmentId(), departmentName, order.getOrderDate(),
+                order.getPricingMultiplier(), order.total(), lines);
     }
 
     // ── helpers ──

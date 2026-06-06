@@ -29,4 +29,10 @@ public interface OrderRepository {
      * Count of orders for a client on a date — drives the per-client-per-day sequence number.
      */
     long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate);
+
+    /**
+     * Every DELIVERED order for a client with an order date in {@code [from, to]} (a calendar
+     * month), ordered by order date ascending. Backs monthly billing aggregation.
+     */
+    List<Order> findDeliveredByClientAndPeriod(Long clientId, LocalDate from, LocalDate to);
 }

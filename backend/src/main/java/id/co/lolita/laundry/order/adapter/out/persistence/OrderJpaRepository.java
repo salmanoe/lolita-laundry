@@ -15,6 +15,23 @@ interface OrderJpaRepository extends JpaRepository<OrderJpaEntity, Long> {
     long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate);
 
     /**
+     * DELIVERED orders for a client whose order date falls in {@code [from, to]} — the
+     * monthly billing aggregation set. Oldest first.
+     */
+    @Query("""
+            SELECT o FROM OrderJpaEntity o
+            WHERE o.clientId = :clientId
+              AND o.status = id.co.lolita.laundry.order.domain.OrderStatus.DELIVERED
+              AND o.orderDate >= :from
+              AND o.orderDate <= :to
+            ORDER BY o.orderDate ASC, o.id ASC
+            """)
+    List<OrderJpaEntity> findDeliveredByClientAndPeriod(
+            @Param("clientId") Long clientId,
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to);
+
+    /**
      * The open delivery pool — every order not yet DELIVERED, shared across all drivers.
      * Ordered ready-first (DONE on top), then by oldest order date so the longest-waiting
      * deliveries surface first.

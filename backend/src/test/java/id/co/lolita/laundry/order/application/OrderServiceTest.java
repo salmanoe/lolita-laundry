@@ -2,6 +2,7 @@ package id.co.lolita.laundry.order.application;
 
 import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderStatus;
+import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.OrderLineInput;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -63,6 +65,8 @@ class OrderServiceTest {
     CatalogGateway catalogGateway;
     @Mock
     PhotoStoragePort photoStorage;
+    @Mock
+    ApplicationEventPublisher eventPublisher;
     @InjectMocks
     OrderService service;
 
@@ -219,6 +223,8 @@ class OrderServiceTest {
         verify(photoStorage).store(eq("photos/AYI-20260101-001.jpg"), any(), eq("image/jpeg"));
         verify(orderRepository).save(any());     // order advanced to DELIVER
         verify(historyRepository).save(any());
+        // Billing reacts to this event to generate the order invoice.
+        verify(eventPublisher).publishEvent(any(OrderDeliveredEvent.class));
     }
 
     @Test

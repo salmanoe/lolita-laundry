@@ -60,4 +60,10 @@ class OrderJpaAdapter implements OrderRepository {
     public long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate) {
         return jpaRepository.countByClientIdAndOrderDate(clientId, orderDate);
     }
+
+    @Override
+    public List<Order> findDeliveredByClientAndPeriod(Long clientId, LocalDate from, LocalDate to) {
+        return jpaRepository.findDeliveredByClientAndPeriod(clientId, from, to).stream()
+                .map(OrderJpaEntity::toDomain).toList();
+    }
 }
