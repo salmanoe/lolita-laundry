@@ -28,6 +28,12 @@ class ClientPriceListJpaAdapter implements ClientPriceListRepository {
     }
 
     @Override
+    public Optional<ClientPriceList> findExact(Long clientId, Long itemId, LocalDate effectiveDate) {
+        return jpaRepository.findByClientIdAndItemIdAndEffectiveDate(clientId, itemId, effectiveDate)
+                .map(ClientPriceListJpaEntity::toDomain);
+    }
+
+    @Override
     public ClientPriceList save(ClientPriceList entry) {
         return jpaRepository.save(ClientPriceListJpaEntity.fromDomain(entry)).toDomain();
     }

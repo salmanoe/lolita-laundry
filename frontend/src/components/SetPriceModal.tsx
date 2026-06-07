@@ -4,26 +4,37 @@ import { apiFetch, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import Modal from './Modal'
 import { indexById, useLookupList } from '../lib/lookups'
-import type { Item } from '../types/api'
+import type { Department, Item } from '../types/api'
 
 interface FormValues {
   itemId: number
   pricePerUnit: number
   effectiveDate: string
+  departmentId: number // 0 = none (COMBINED clients)
 }
 
 interface Props {
   open: boolean
   onClose: () => void
   clientId: number
+  /** PER_DEPARTMENT clients require an item→department mapping; others must not send one. */
+  perDepartment: boolean
+  /** Active departments to choose from (PER_DEPARTMENT only). */
+  departments: Department[]
   presetItemId?: number // pre-select an item (e.g. "change price" on an existing row)
+  presetDepartmentId?: number // pre-select the item's current department
+  presetPrice?: number // pre-fill the current price (e.g. "Ubah Harga" on an existing row)
+  presetEffectiveDate?: string // pre-fill the current effective date (ISO yyyy-MM-dd)
 }
 
 const field =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
 const label = 'block text-xs font-medium text-gray-600 mb-1'
 
-export default function SetPriceModal({ open, onClose, clientId, presetItemId }: Props) {
+export default function SetPriceModal({
+  open, onClose, clientId, perDepartment, departments, presetItemId, presetDepartmentId, presetPrice,
+  presetEffectiveDate,
+}: Props) {
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
 
@@ -44,8 +55,9 @@ export default function SetPriceModal({ open, onClose, clientId, presetItemId }:
   } = useForm<FormValues>({
     values: {
       itemId: presetItemId ?? 0,
-      pricePerUnit: 0,
-      effectiveDate: '',
+      pricePerUnit: presetPrice ?? 0,
+      effectiveDate: presetEffectiveDate ?? '',
+      departmentId: presetDepartmentId ?? 0,
     },
   })
 
@@ -59,6 +71,8 @@ export default function SetPriceModal({ open, onClose, clientId, presetItemId }:
           itemId: Number(v.itemId),
           pricePerUnit: Number(v.pricePerUnit),
           effectiveDate: v.effectiveDate || null, // null → server defaults to today
+          // departmentId required for PER_DEPARTMENT, must be null otherwise
+          departmentId: perDepartment ? Number(v.departmentId) : null,
         }),
       })
     },
@@ -91,6 +105,20 @@ export default function SetPriceModal({ open, onClose, clientId, presetItemId }:
           </select>
           {errors.itemId && <p className="mt-1 text-xs text-red-600">Pilih item terlebih dahulu.</p>}
         </div>
+
+        {perDepartment && (
+          <div>
+            <label className={label}>Departemen</label>
+            <select className={field} {...register('departmentId', { required: true, min: 1, valueAsNumber: true })}>
+              <option value={0} disabled>— Pilih departemen —</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+            {errors.departmentId && <p className="mt-1 text-xs text-red-600">Pilih departemen item ini.</p>}
+            <p className="mt-1 text-xs text-gray-400">Menentukan tagihan departemen mana item ini masuk.</p>
+          </div>
+        )}
 
         <div>
           <label className={label}>Harga per Satuan (Rp)</label>

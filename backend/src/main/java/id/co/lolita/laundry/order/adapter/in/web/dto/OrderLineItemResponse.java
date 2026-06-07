@@ -9,10 +9,11 @@ public record OrderLineItemResponse(
         Long itemId,
         BigDecimal quantity,
         BigDecimal priceAtOrder,
-        BigDecimal subtotal
+        BigDecimal subtotal,
+        Long departmentId
 ) {
     public static OrderLineItemResponse from(OrderLineItem li) {
-        return new OrderLineItemResponse(li.getId(), li.getItemId(), li.getQuantity(),
-                li.getPriceAtOrder(), li.getSubtotal());
+        return new OrderLineItemResponse(li.id(), li.itemId(), li.quantity(),
+                li.priceAtOrder(), li.subtotal(), li.departmentId());
     }
 }

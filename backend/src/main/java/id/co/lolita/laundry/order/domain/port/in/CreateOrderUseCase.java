@@ -12,7 +12,6 @@ public interface CreateOrderUseCase {
 
     record CreateOrderCommand(
             Long clientId,
-            Long departmentId,     // required iff the client bills per department
             boolean treatment,
             LocalDate dueDate,
             String submittedByName,

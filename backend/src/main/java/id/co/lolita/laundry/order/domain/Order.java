@@ -22,7 +22,6 @@ public class Order {
     private final Long id;
     private final String orderNumber;
     private final Long clientId;
-    private final Long departmentId;       // nullable — only set for PER_DEPARTMENT clients
     private final LocalDate orderDate;
     private LocalDate dueDate;
     private OrderStatus status;
@@ -34,19 +33,19 @@ public class Order {
     private final List<OrderLineItem> lineItems = new ArrayList<>();
 
     /**
-     * Input shape for a new line before pricing/subtotal computation.
+     * Input shape for a new line before pricing/subtotal computation. {@code departmentId} is
+     * the item's department for the client (PER_DEPARTMENT clients only; null for COMBINED).
      */
-    public record NewLine(Long itemId, BigDecimal quantity, BigDecimal priceAtOrder) {
+    public record NewLine(Long itemId, BigDecimal quantity, BigDecimal priceAtOrder, Long departmentId) {
     }
 
-    public Order(Long id, String orderNumber, Long clientId, Long departmentId, LocalDate orderDate,
+    public Order(Long id, String orderNumber, Long clientId, LocalDate orderDate,
                  LocalDate dueDate, OrderStatus status, BigDecimal pricingMultiplier, String submittedByName,
                  String notes, Long createdByUserId, Instant createdAt,
                  List<OrderLineItem> lineItems) {
         this.id = id;
         this.orderNumber = orderNumber;
         this.clientId = clientId;
-        this.departmentId = departmentId;
         this.orderDate = orderDate;
         this.dueDate = dueDate;
         this.status = status;
@@ -60,17 +59,17 @@ public class Order {
         }
     }
 
-    public static Order create(String orderNumber, Long clientId, Long departmentId, LocalDate orderDate,
+    public static Order create(String orderNumber, Long clientId, LocalDate orderDate,
                                LocalDate dueDate, BigDecimal pricingMultiplier, String submittedByName,
                                String notes, Long createdByUserId, List<NewLine> lines, Instant createdAt) {
         if (lines == null || lines.isEmpty()) {
             throw new IllegalArgumentException("Order must have at least one line item");
         }
-        var order = new Order(null, orderNumber, clientId, departmentId, orderDate, dueDate,
+        var order = new Order(null, orderNumber, clientId, orderDate, dueDate,
                 OrderStatus.RECEIVED, pricingMultiplier, submittedByName, notes, createdByUserId,
                 createdAt, null);
         lines.forEach(l -> order.lineItems.add(
-                OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), pricingMultiplier)));
+                OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), l.departmentId(), pricingMultiplier)));
         return order;
     }
 
@@ -130,7 +129,7 @@ public class Order {
         if (lines != null && !lines.isEmpty()) {
             this.lineItems.clear();
             lines.forEach(l -> this.lineItems.add(
-                    OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), pricingMultiplier)));
+                    OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), l.departmentId(), pricingMultiplier)));
         }
     }
 
@@ -143,7 +142,7 @@ public class Order {
 
     public BigDecimal total() {
         return lineItems.stream()
-                .map(OrderLineItem::getSubtotal)
+                .map(OrderLineItem::subtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

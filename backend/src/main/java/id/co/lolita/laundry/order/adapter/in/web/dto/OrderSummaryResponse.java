@@ -14,7 +14,6 @@ public record OrderSummaryResponse(
         Long id,
         String orderNumber,
         Long clientId,
-        Long departmentId,
         LocalDate orderDate,
         LocalDate dueDate,
         OrderStatus status,
@@ -25,7 +24,7 @@ public record OrderSummaryResponse(
 ) {
     public static OrderSummaryResponse from(Order o) {
         return new OrderSummaryResponse(
-                o.getId(), o.getOrderNumber(), o.getClientId(), o.getDepartmentId(),
+                o.getId(), o.getOrderNumber(), o.getClientId(),
                 o.getOrderDate(), o.getDueDate(), o.getStatus(), o.getPricingMultiplier(),
                 o.getSubmittedByName(), o.total(), o.getCreatedAt()
         );

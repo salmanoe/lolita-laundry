@@ -10,6 +10,9 @@ import java.util.Optional;
 
 interface ClientPriceListJpaRepository extends JpaRepository<ClientPriceListJpaEntity, Long> {
 
+    Optional<ClientPriceListJpaEntity> findByClientIdAndItemIdAndEffectiveDate(
+            Long clientId, Long itemId, LocalDate effectiveDate);
+
     /**
      * Current effective price for every item for a client.
      * Uses a subquery to pick the latest row per (client, item) pair as of today.

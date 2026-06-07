@@ -140,7 +140,9 @@ class OrderInvoiceService implements CreateOrderInvoiceUseCase {
                 order.orderNumber(),
                 BillingFormats.longDate(order.orderDate()),
                 treatment ? "Treatment" : "Reguler",
-                order.departmentName() == null ? "" : order.departmentName(),
+                // An order may span departments now — the per-order invoice stays itemized and
+                // does not carry a single department label.
+                "",
                 items,
                 BillingFormats.money(invoice.getSubtotal()));
     }

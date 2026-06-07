@@ -23,9 +23,10 @@ public interface MonthlyBillingRepository {
     Optional<MonthlyBilling> findExisting(Long clientId, Long departmentId, int year, int month);
 
     /**
-     * The billing that currently contains a line for the given order, if any.
+     * Every billing that currently contains a line for the given order. An order may appear on
+     * several billings at once (one per department, for PER_DEPARTMENT clients).
      */
-    Optional<MonthlyBilling> findByOrderLine(Long orderId);
+    List<MonthlyBilling> findAllByOrderLine(Long orderId);
 
     void deleteById(Long id);
 }

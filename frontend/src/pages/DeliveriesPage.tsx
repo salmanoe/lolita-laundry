@@ -74,7 +74,6 @@ function DeliveryCard({ delivery }: { delivery: DriverDelivery }) {
             </span>
           </div>
           <p className="mt-1 text-sm text-gray-700">{delivery.clientName}</p>
-          {delivery.departmentName && <p className="text-xs text-gray-400">{delivery.departmentName}</p>}
         </div>
         <div className="shrink-0 text-right text-xs text-gray-400">
           <p>Order: {delivery.orderDate}</p>

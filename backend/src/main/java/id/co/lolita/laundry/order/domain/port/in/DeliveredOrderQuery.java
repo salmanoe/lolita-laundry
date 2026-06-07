@@ -17,20 +17,22 @@ public interface DeliveredOrderQuery {
 
     /**
      * A priced line on a delivered order, with the item already resolved to its display name.
+     * {@code departmentId}/{@code departmentName} are set for PER_DEPARTMENT clients (null for
+     * COMBINED) — billing splits the order across departments on these.
      */
     record DeliveredLine(String itemName, String unit, BigDecimal quantity,
-                         BigDecimal unitPrice, BigDecimal subtotal) {
+                         BigDecimal unitPrice, BigDecimal subtotal,
+                         Long departmentId, String departmentName) {
     }
 
     /**
-     * Everything billing needs about one delivered order.
+     * Everything billing needs about one delivered order. An order may span several departments
+     * (each line carries its own); the monthly billing splits it per department.
      *
-     * @param departmentId   nullable — only set for PER_DEPARTMENT clients (e.g. PBS)
-     * @param departmentName nullable — resolved display name for {@code departmentId}
-     * @param total          sum of line subtotals (already includes the pricing multiplier)
+     * @param total sum of line subtotals (already includes the pricing multiplier)
      */
-    record DeliveredOrderDetail(Long orderId, String orderNumber, Long clientId, Long departmentId,
-                                String departmentName, LocalDate orderDate, BigDecimal pricingMultiplier,
+    record DeliveredOrderDetail(Long orderId, String orderNumber, Long clientId,
+                                LocalDate orderDate, BigDecimal pricingMultiplier,
                                 BigDecimal total, List<DeliveredLine> lines) {
     }
 

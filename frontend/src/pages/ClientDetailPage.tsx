@@ -20,7 +20,7 @@ export default function ClientDetailPage() {
 
   const [editClient, setEditClient] = useState(false)
   const [deptForm, setDeptForm] = useState<{ open: boolean; department?: Department }>({ open: false })
-  const [priceForm, setPriceForm] = useState<{ open: boolean; presetItemId?: number }>({ open: false })
+  const [priceForm, setPriceForm] = useState<{ open: boolean; presetItemId?: number; presetDepartmentId?: number; presetPrice?: number; presetEffectiveDate?: string }>({ open: false })
   const [copied, setCopied] = useState(false)
 
   const token = async () => getAccessTokenSilently()
@@ -49,7 +49,10 @@ export default function ClientDetailPage() {
   if (clientQ.error || !clientQ.data) return <div className="text-sm text-red-500">Gagal memuat data klien.</div>
 
   const client = clientQ.data
+  const perDepartment = client.billingMode === 'PER_DEPARTMENT'
   const itemsById = new Map((itemsQ.data ?? []).map((i) => [i.id, i]))
+  const deptById = new Map((deptQ.data ?? []).map((d) => [d.id, d]))
+  const activeDepartments = (deptQ.data ?? []).filter((d) => d.active)
 
   return (
     <div className="space-y-8">
@@ -169,7 +172,7 @@ export default function ClientDetailPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Item', 'Satuan', 'Harga', 'Berlaku Mulai', ''].map((h) => (
+                {['Item', 'Satuan', ...(perDepartment ? ['Departemen'] : []), 'Harga', 'Berlaku Mulai', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -181,11 +184,18 @@ export default function ClientDetailPage() {
                   <tr key={price.itemId} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-800">{item?.name ?? `#${price.itemId}`}</td>
                     <td className="px-4 py-3 text-gray-500">{item ? (unitsById.get(item.unitId)?.displayName ?? '—') : '—'}</td>
+                    {perDepartment && (
+                      <td className="px-4 py-3 text-gray-500">
+                        {price.departmentId == null
+                          ? <span className="text-amber-600">Belum diatur</span>
+                          : (deptById.get(price.departmentId)?.name ?? `#${price.departmentId}`)}
+                      </td>
+                    )}
                     <td className="px-4 py-3 font-medium text-gray-700">{rupiah(price.pricePerUnit)}</td>
                     <td className="px-4 py-3 text-gray-500">{price.effectiveDate}</td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={() => setPriceForm({ open: true, presetItemId: price.itemId })}
+                        onClick={() => setPriceForm({ open: true, presetItemId: price.itemId, presetDepartmentId: price.departmentId ?? undefined, presetPrice: price.pricePerUnit, presetEffectiveDate: price.effectiveDate })}
                         className="text-sm font-medium text-brand-600 hover:text-brand-700"
                       >
                         Ubah Harga
@@ -195,7 +205,7 @@ export default function ClientDetailPage() {
                 )
               })}
               {priceQ.data?.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">Belum ada harga.</td></tr>
+                <tr><td colSpan={perDepartment ? 6 : 5} className="px-4 py-6 text-center text-sm text-gray-400">Belum ada harga.</td></tr>
               )}
             </tbody>
           </table>
@@ -212,7 +222,12 @@ export default function ClientDetailPage() {
       <SetPriceModal
         open={priceForm.open}
         clientId={clientId}
+        perDepartment={perDepartment}
+        departments={activeDepartments}
         presetItemId={priceForm.presetItemId}
+        presetDepartmentId={priceForm.presetDepartmentId}
+        presetPrice={priceForm.presetPrice}
+        presetEffectiveDate={priceForm.presetEffectiveDate}
         onClose={() => setPriceForm({ open: false })}
       />
     </div>

@@ -6,6 +6,7 @@ import id.co.lolita.laundry.client.domain.ClientType;
 import id.co.lolita.laundry.client.domain.port.in.ManageClientUseCase.CreateClientCommand;
 import id.co.lolita.laundry.client.domain.port.in.ManageDepartmentUseCase.CreateDepartmentCommand;
 import id.co.lolita.laundry.client.domain.port.in.ManagePriceListUseCase.SetPriceCommand;
+import id.co.lolita.laundry.client.domain.port.out.ClientItemDepartmentRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientPriceListRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientTypeRepository;
@@ -43,6 +44,8 @@ class ClientServiceTest {
     DepartmentRepository departmentRepository;
     @Mock
     ClientPriceListRepository priceListRepository;
+    @Mock
+    ClientItemDepartmentRepository itemDepartmentRepository;
     @Mock
     ClientTypeRepository clientTypeRepository;
     @InjectMocks
@@ -87,7 +90,7 @@ class ClientServiceTest {
         when(clientRepository.findById(1L)).thenReturn(Optional.of(activeClient(1L)));
         when(priceListRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var saved = service.setPrice(new SetPriceCommand(1L, 10L, new BigDecimal("5000"), null));
+        var saved = service.setPrice(new SetPriceCommand(1L, 10L, new BigDecimal("5000"), null, null));
 
         assertThat(saved.effectiveDate()).isEqualTo(LocalDate.now());
     }
@@ -96,7 +99,7 @@ class ClientServiceTest {
     void setPrice_rejectsUnknownClient() {
         when(clientRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.setPrice(new SetPriceCommand(99L, 10L, BigDecimal.TEN, null)))
+        assertThatThrownBy(() -> service.setPrice(new SetPriceCommand(99L, 10L, BigDecimal.TEN, null, null)))
                 .isInstanceOf(NotFoundException.class);
         verify(priceListRepository, never()).save(any());
     }

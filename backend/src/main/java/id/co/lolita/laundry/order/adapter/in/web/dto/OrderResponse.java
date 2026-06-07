@@ -15,7 +15,6 @@ public record OrderResponse(
         Long id,
         String orderNumber,
         Long clientId,
-        Long departmentId,
         LocalDate orderDate,
         LocalDate dueDate,
         OrderStatus status,
@@ -29,7 +28,7 @@ public record OrderResponse(
 ) {
     public static OrderResponse from(Order o) {
         return new OrderResponse(
-                o.getId(), o.getOrderNumber(), o.getClientId(), o.getDepartmentId(),
+                o.getId(), o.getOrderNumber(), o.getClientId(),
                 o.getOrderDate(), o.getDueDate(), o.getStatus(), o.getPricingMultiplier(),
                 o.getSubmittedByName(), o.getNotes(), o.getCreatedByUserId(),
                 o.getCreatedAt(),

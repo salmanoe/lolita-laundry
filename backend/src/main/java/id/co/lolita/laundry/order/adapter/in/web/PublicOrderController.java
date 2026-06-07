@@ -36,7 +36,7 @@ class PublicOrderController {
     @ResponseStatus(HttpStatus.CREATED)
     OrderResponse submit(@PathVariable UUID token, @Valid @RequestBody SubmitOrderRequest request) {
         var command = new SubmitPublicOrderCommand(
-                token, request.submittedByName(), request.departmentId(), request.treatment(), request.notes(),
+                token, request.submittedByName(), request.treatment(), request.notes(),
                 request.items().stream().map(OrderLineRequest::toInput).toList());
         return OrderResponse.from(submitOrder.submit(command));
     }

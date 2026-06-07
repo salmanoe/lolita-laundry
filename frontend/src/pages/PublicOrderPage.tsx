@@ -19,7 +19,6 @@ export default function PublicOrderPage() {
   })
 
   const [submittedByName, setSubmittedByName] = useState('')
-  const [departmentId, setDepartmentId] = useState<number | ''>('')
   const [treatment, setTreatment] = useState(false)
   const [notes, setNotes] = useState('')
   const [quantities, setQuantities] = useState<QuantityMap>({})
@@ -27,9 +26,10 @@ export default function PublicOrderPage() {
 
   const form = formQ.data
 
-  // id → name resolvers for the picker (names are now carried in the public payload).
-  const categoryName = useMemo(() => {
-    const map = new Map(form?.items.map((i) => [i.categoryId, i.categoryName ?? '—']))
+  // id → name resolvers for the picker. Department names come from the form payload; items
+  // carry their departmentId (V9) and the picker groups by it (no department dropdown anymore).
+  const departmentName = useMemo(() => {
+    const map = new Map(form?.departments.map((d) => [d.id, d.name]))
     return (id: number) => map.get(id) ?? '—'
   }, [form])
   const unitName = useMemo(() => {
@@ -45,7 +45,6 @@ export default function PublicOrderPage() {
         method: 'POST',
         body: JSON.stringify({
           submittedByName: submittedByName.trim(),
-          departmentId: departmentId === '' ? null : departmentId,
           treatment,
           notes: notes.trim() || null,
           items: lines,
@@ -54,9 +53,8 @@ export default function PublicOrderPage() {
     onSuccess: (order) => setConfirmed(order),
   })
 
-  const departmentMissing = !!form?.perDepartment && departmentId === ''
   const canSubmit =
-    submittedByName.trim().length > 0 && lines.length > 0 && !departmentMissing && !submit.isPending
+    submittedByName.trim().length > 0 && lines.length > 0 && !submit.isPending
 
   if (formQ.isLoading) {
     return <Centered>Memuat formulir order…</Centered>
@@ -124,33 +122,25 @@ export default function PublicOrderPage() {
             />
           </Field>
 
-          {form.perDepartment && (
-            <Field label="Departemen" required>
-              <select
-                value={departmentId}
-                onChange={(e) => setDepartmentId(e.target.value === '' ? '' : Number(e.target.value))}
-                className={inputCls}
-              >
-                <option value="">— Pilih departemen —</option>
-                {form.departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-
           {form.treatmentAvailable && (
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={treatment}
-                onChange={(e) => setTreatment(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-              />
-              Treatment (harga ×2)
-            </label>
+            <div>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={treatment}
+                  onChange={(e) => setTreatment(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                Treatment (harga ×2)
+              </label>
+              <p
+                className={`mt-1 text-xs ${
+                  treatment ? 'rounded-md bg-amber-50 px-2 py-1 text-amber-700' : 'text-gray-400'
+                }`}
+              >
+                Treatment berlaku untuk <strong>semua item</strong> di order ini. Untuk item Reguler, buat order terpisah.
+              </p>
+            </div>
           )}
 
           <Field label="Catatan">
@@ -169,7 +159,7 @@ export default function PublicOrderPage() {
           <h2 className="mb-2 text-sm font-semibold text-gray-700">Item</h2>
           <OrderItemPicker
             items={form.items}
-            categoryName={categoryName}
+            departmentName={departmentName}
             unitName={unitName}
             showPrices={false}
             quantities={quantities}

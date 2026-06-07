@@ -22,7 +22,7 @@ public record OrderFormResponse(
     }
 
     public record ItemDto(Long itemId, String name, Long unitId, String unitName,
-                          Long categoryId, String categoryName) {
+                          Long departmentId) {
     }
 
     public static OrderFormResponse from(OrderFormView v) {
@@ -31,7 +31,7 @@ public record OrderFormResponse(
                 v.departments().stream().map(d -> new DepartmentDto(d.id(), d.name())).toList(),
                 v.items().stream()
                         .map(i -> new ItemDto(i.itemId(), i.name(), i.unitId(), i.unitName(),
-                                i.categoryId(), i.categoryName()))
+                                i.departmentId()))
                         .toList()
         );
     }

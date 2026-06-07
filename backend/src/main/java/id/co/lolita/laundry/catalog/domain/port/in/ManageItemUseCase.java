@@ -4,10 +4,10 @@ import id.co.lolita.laundry.catalog.domain.ItemMaster;
 
 public interface ManageItemUseCase {
 
-    record CreateItemCommand(String name, Long unitId, Long categoryId) {
+    record CreateItemCommand(String name, Long unitId) {
     }
 
-    record UpdateItemCommand(Long id, String name, Long unitId, Long categoryId, boolean active) {
+    record UpdateItemCommand(Long id, String name, Long unitId, boolean active) {
     }
 
     ItemMaster createItem(CreateItemCommand command);

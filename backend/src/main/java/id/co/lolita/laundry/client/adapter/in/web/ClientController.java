@@ -114,7 +114,10 @@ class ClientController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('OWNER')")
     PriceListResponse setPrice(@PathVariable Long clientId, @Valid @RequestBody SetPriceRequest request) {
-        var command = new SetPriceCommand(clientId, request.itemId(), request.pricePerUnit(), request.effectiveDate());
-        return PriceListResponse.from(managePriceList.setPrice(command));
+        var command = new SetPriceCommand(clientId, request.itemId(), request.pricePerUnit(),
+                request.effectiveDate(), request.departmentId());
+        var saved = managePriceList.setPrice(command);
+        return new PriceListResponse(saved.itemId(), saved.pricePerUnit(), saved.effectiveDate(),
+                request.departmentId());
     }
 }

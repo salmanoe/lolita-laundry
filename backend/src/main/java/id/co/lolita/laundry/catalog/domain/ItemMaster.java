@@ -4,7 +4,8 @@ import lombok.Getter;
 
 /**
  * A laundry item in the master catalogue.
- * Items are shared across all clients; per-client pricing is in ClientPriceList (client module).
+ * Items are shared across all clients; per-client pricing is in ClientPriceList (client module)
+ * and, for PER_DEPARTMENT clients, the per-client item→department mapping lives there too.
  */
 @Getter
 public class ItemMaster {
@@ -12,21 +13,18 @@ public class ItemMaster {
     private final Long id;
     private String name;
     private Long unitId;      // FK → item_units
-    private Long categoryId;  // FK → item_categories
     private boolean active;
 
-    public ItemMaster(Long id, String name, Long unitId, Long categoryId, boolean active) {
+    public ItemMaster(Long id, String name, Long unitId, boolean active) {
         this.id = id;
         this.name = name;
         this.unitId = unitId;
-        this.categoryId = categoryId;
         this.active = active;
     }
 
-    public void update(String name, Long unitId, Long categoryId) {
+    public void update(String name, Long unitId) {
         this.name = name;
         this.unitId = unitId;
-        this.categoryId = categoryId;
     }
 
     public void deactivate() {

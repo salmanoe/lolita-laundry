@@ -21,7 +21,6 @@ public interface GetDriverDeliveriesUseCase {
             Long orderId,
             String orderNumber,
             String clientName,
-            String departmentName,   // null unless the client bills per department
             LocalDate orderDate,
             LocalDate dueDate,
             OrderStatus status,

@@ -11,7 +11,6 @@ import java.util.List;
 /** Staff-created order body. */
 public record CreateOrderRequest(
         @NotNull Long clientId,
-        Long departmentId,
         boolean treatment,
         LocalDate dueDate,
         @NotBlank String submittedByName,

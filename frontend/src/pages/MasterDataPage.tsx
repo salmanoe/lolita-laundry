@@ -6,14 +6,14 @@ import LookupFormModal from '../components/LookupFormModal'
 import { lookupKindLabel, useLookupList, type LookupKind } from '../lib/lookups'
 import type { Lookup } from '../types/api'
 
-const KINDS: LookupKind[] = ['item-units', 'item-categories', 'client-types']
+const KINDS: LookupKind[] = ['item-units', 'client-types']
 
 export default function MasterDataPage() {
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold text-gray-800">Master Data</h1>
-        <p className="text-sm text-gray-500">Kelola satuan, kategori item, dan tipe klien.</p>
+        <p className="text-sm text-gray-500">Kelola satuan item dan tipe klien.</p>
       </div>
       {KINDS.map((kind) => (
         <LookupSection key={kind} kind={kind} />

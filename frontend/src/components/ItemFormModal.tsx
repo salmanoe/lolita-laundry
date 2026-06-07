@@ -9,7 +9,6 @@ import type { Item } from '../types/api'
 interface FormValues {
   name: string
   unitId: number
-  categoryId: number
   active: boolean
 }
 
@@ -29,10 +28,8 @@ export default function ItemFormModal({ open, onClose, item }: Props) {
   const qc = useQueryClient()
 
   const units = useLookupList('item-units')
-  const categories = useLookupList('item-categories')
   // Active options, plus the item's current value even if it was since deactivated.
   const unitOptions = (units.data ?? []).filter((u) => u.active || u.id === item?.unitId)
-  const categoryOptions = (categories.data ?? []).filter((c) => c.active || c.id === item?.categoryId)
 
   const {
     register,
@@ -42,7 +39,6 @@ export default function ItemFormModal({ open, onClose, item }: Props) {
     values: {
       name: item?.name ?? '',
       unitId: item?.unitId ?? 0,
-      categoryId: item?.categoryId ?? 0,
       active: item?.active ?? true,
     },
   })
@@ -54,13 +50,13 @@ export default function ItemFormModal({ open, onClose, item }: Props) {
         return apiFetch(`/api/items/${item!.id}`, {
           method: 'PUT',
           token,
-          body: JSON.stringify({ name: v.name, unitId: v.unitId, categoryId: v.categoryId, active: v.active }),
+          body: JSON.stringify({ name: v.name, unitId: v.unitId, active: v.active }),
         })
       }
       return apiFetch('/api/items', {
         method: 'POST',
         token,
-        body: JSON.stringify({ name: v.name, unitId: v.unitId, categoryId: v.categoryId }),
+        body: JSON.stringify({ name: v.name, unitId: v.unitId }),
       })
     },
     onSuccess: () => {
@@ -78,27 +74,15 @@ export default function ItemFormModal({ open, onClose, item }: Props) {
           {errors.name && <p className="mt-1 text-xs text-red-600">Nama wajib diisi.</p>}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={label}>Satuan</label>
-            <select className={field} {...register('unitId', { required: true, min: 1, valueAsNumber: true })}>
-              <option value={0} disabled>— Pilih —</option>
-              {unitOptions.map((u) => (
-                <option key={u.id} value={u.id}>{u.displayName}</option>
-              ))}
-            </select>
-            {errors.unitId && <p className="mt-1 text-xs text-red-600">Pilih satuan.</p>}
-          </div>
-          <div>
-            <label className={label}>Kategori</label>
-            <select className={field} {...register('categoryId', { required: true, min: 1, valueAsNumber: true })}>
-              <option value={0} disabled>— Pilih —</option>
-              {categoryOptions.map((c) => (
-                <option key={c.id} value={c.id}>{c.displayName}</option>
-              ))}
-            </select>
-            {errors.categoryId && <p className="mt-1 text-xs text-red-600">Pilih kategori.</p>}
-          </div>
+        <div>
+          <label className={label}>Satuan</label>
+          <select className={field} {...register('unitId', { required: true, min: 1, valueAsNumber: true })}>
+            <option value={0} disabled>— Pilih —</option>
+            {unitOptions.map((u) => (
+              <option key={u.id} value={u.id}>{u.displayName}</option>
+            ))}
+          </select>
+          {errors.unitId && <p className="mt-1 text-xs text-red-600">Pilih satuan.</p>}
         </div>
 
         {editing && (

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
@@ -22,6 +22,13 @@ export default function BillingPage() {
   const [year, setYear] = useState<number | ''>('')
   const [month, setMonth] = useState<number | ''>('')
   const [genOpen, setGenOpen] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
 
   // OWNER-only bulk refresh: re-render every billing & invoice PDF to the current template
   // (layout-only — amounts unchanged). For applying a finalized PDF design before go-live.
@@ -59,6 +66,17 @@ export default function BillingPage() {
   })
 
   const billings = data ?? []
+
+  // Group per client+period so a PER_DEPARTMENT client's department billings (PBS: one per
+  // Room Linen / Uniform / F&B) collapse under one expandable parent row — "all departments on
+  // a single page", minimized when collapsed. Single-billing periods render as a plain row.
+  const groups = Array.from(
+    billings.reduce((m, b) => {
+      const key = `${b.clientId}-${b.periodYear}-${b.periodMonth}`
+      ;(m.get(key) ?? m.set(key, []).get(key)!).push(b)
+      return m
+    }, new Map<string, MonthlyBilling[]>()),
+  )
 
   return (
     <div>
@@ -132,23 +150,67 @@ export default function BillingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {billings.map((b) => (
-                <tr key={b.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <Link to={`/billing/${b.id}`} className="font-mono font-medium text-brand-700 hover:underline">
-                      {b.billingNumber}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">{clientsById.get(b.clientId)?.name ?? `#${b.clientId}`}</td>
-                  <td className="px-4 py-3 text-gray-500">{monthName[b.periodMonth]} {b.periodYear}</td>
-                  <td className="px-4 py-3 font-medium text-gray-700">{rupiah(b.total)}</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${billingStatusBadge[b.status]}`}>
-                      {billingStatusLabel[b.status]}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {groups.map(([key, group]) => {
+                // Single billing for the period → a plain row.
+                if (group.length === 1) {
+                  const b = group[0]
+                  return (
+                    <tr key={b.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <Link to={`/billing/${b.id}`} className="font-mono font-medium text-brand-700 hover:underline">
+                          {b.billingNumber}
+                        </Link>
+                        {b.departmentName && <p className="text-xs text-gray-400">{b.departmentName}</p>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{clientsById.get(b.clientId)?.name ?? `#${b.clientId}`}</td>
+                      <td className="px-4 py-3 text-gray-500">{monthName[b.periodMonth]} {b.periodYear}</td>
+                      <td className="px-4 py-3 font-medium text-gray-700">{rupiah(b.total)}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${billingStatusBadge[b.status]}`}>
+                          {billingStatusLabel[b.status]}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                }
+
+                // Multiple department billings for one client+period → collapsible parent.
+                const first = group[0]
+                const open = expanded.has(key)
+                const total = group.reduce((s, b) => s + b.total, 0)
+                return (
+                  <Fragment key={key}>
+                    <tr className="cursor-pointer bg-gray-50/60 hover:bg-gray-100/70" onClick={() => toggle(key)}>
+                      <td className="px-4 py-3 font-medium text-gray-700">
+                        <span className="mr-2 inline-block text-gray-400">{open ? '▾' : '▸'}</span>
+                        {group.length} departemen
+                      </td>
+                      <td className="px-4 py-3 text-gray-700">{clientsById.get(first.clientId)?.name ?? `#${first.clientId}`}</td>
+                      <td className="px-4 py-3 text-gray-500">{monthName[first.periodMonth]} {first.periodYear}</td>
+                      <td className="px-4 py-3 font-medium text-gray-700">{rupiah(total)}</td>
+                      <td className="px-4 py-3 text-xs text-gray-400">{open ? 'Tutup' : 'Lihat per departemen'}</td>
+                    </tr>
+                    {open && group.map((b) => (
+                      <tr key={b.id} className="bg-white hover:bg-gray-50">
+                        <td className="px-4 py-3 pl-10">
+                          <Link to={`/billing/${b.id}`} className="font-mono font-medium text-brand-700 hover:underline">
+                            {b.billingNumber}
+                          </Link>
+                          {b.departmentName && <p className="text-xs text-gray-500">{b.departmentName}</p>}
+                        </td>
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3 font-medium text-gray-700">{rupiah(b.total)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${billingStatusBadge[b.status]}`}>
+                            {billingStatusLabel[b.status]}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                )
+              })}
               {billings.length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
@@ -196,7 +258,7 @@ function GenerateBillingModal({
       qc.invalidateQueries({ queryKey: ['billings'] })
       onClose()
       if (created.length === 0) {
-        alert('Tidak ada order DELIVERED pada periode tersebut — tidak ada tagihan yang dibuat.')
+        alert('Tidak ada order pada periode tersebut — tidak ada tagihan yang dibuat.')
       }
     },
   })

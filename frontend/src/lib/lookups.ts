@@ -3,12 +3,11 @@ import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import type { Lookup } from '../types/api'
 
-/** The three managed reference-data collections. The string is also the API path segment. */
-export type LookupKind = 'item-units' | 'item-categories' | 'client-types'
+/** The managed reference-data collections. The string is also the API path segment. */
+export type LookupKind = 'item-units' | 'client-types'
 
 export const lookupKindLabel: Record<LookupKind, string> = {
   'item-units': 'Satuan Item',
-  'item-categories': 'Kategori Item',
   'client-types': 'Tipe Klien',
 }
 

@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 
 public record CreateItemRequest(
         @NotBlank @Size(max = 100) String name,
-        @NotNull Long unitId,
-        @NotNull Long categoryId
+        @NotNull Long unitId
 ) {
 }

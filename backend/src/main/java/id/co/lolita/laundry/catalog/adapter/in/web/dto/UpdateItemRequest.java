@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Size;
 public record UpdateItemRequest(
         @NotBlank @Size(max = 100) String name,
         @NotNull Long unitId,
-        @NotNull Long categoryId,
         @NotNull Boolean active
 ) {
 }

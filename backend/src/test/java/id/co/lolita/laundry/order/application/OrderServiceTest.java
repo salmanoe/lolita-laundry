@@ -1,6 +1,7 @@
 package id.co.lolita.laundry.order.application;
 
 import id.co.lolita.laundry.order.domain.Order;
+import id.co.lolita.laundry.order.domain.OrderLineItem;
 import id.co.lolita.laundry.order.domain.OrderStatus;
 import id.co.lolita.laundry.order.domain.event.OrderBillingSyncEvent;
 import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
@@ -46,8 +47,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Orchestration rules of OrderService that aren't visible in the domain object: order
- * number generation, price snapshotting, treatment gating, department requirement, the
- * DELIVERED guard on status advancement, and delivery preconditions. Pure Mockito.
+ * number generation, price snapshotting, treatment gating, line-level department resolution,
+ * the DELIVERED guard on status advancement, and delivery preconditions. Pure Mockito.
  */
 @ExtendWith(MockitoExtension.class)
 class OrderServiceTest {
@@ -80,15 +81,15 @@ class OrderServiceTest {
     }
 
     private Order persisted(OrderStatus status) {
-        return new Order(99L, "AYI-20260101-001", 1L, null, LocalDate.now(), null, status,
+        return new Order(99L, "AYI-20260101-001", 1L, LocalDate.now(), null, status,
                 BigDecimal.ONE, "Staff", null, null, Instant.now(),
-                List.of(new id.co.lolita.laundry.order.domain.OrderLineItem(
-                        500L, 10L, BigDecimal.ONE, new BigDecimal("5000"), new BigDecimal("5000.00"))));
+                List.of(new OrderLineItem(
+                        500L, 10L, BigDecimal.ONE, new BigDecimal("5000"), new BigDecimal("5000.00"), null)));
     }
 
     private void stubPricingForItem10() {
         when(catalogGateway.findActiveById(10L))
-                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs", 1L, "Bed Linen")));
+                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs")));
         when(pricingGateway.effectivePrice(eq(1L), eq(10L), any()))
                 .thenReturn(Optional.of(new BigDecimal("5000")));
     }
@@ -101,14 +102,15 @@ class OrderServiceTest {
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", null, false, null,
+                TOKEN, "Budi", false, null,
                 List.of(new OrderLineInput(10L, new BigDecimal("3")))));
 
         var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-001";
         assertThat(result.getOrderNumber()).isEqualTo(expected);
         assertThat(result.getStatus()).isEqualTo(OrderStatus.RECEIVED);
-        assertThat(result.getLineItems().getFirst().getPriceAtOrder()).isEqualByComparingTo("5000");
-        assertThat(result.getLineItems().getFirst().getSubtotal()).isEqualByComparingTo("15000.00");
+        assertThat(result.getLineItems().getFirst().priceAtOrder()).isEqualByComparingTo("5000");
+        assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("15000.00");
+        assertThat(result.getLineItems().getFirst().departmentId()).isNull();   // COMBINED client
         verify(historyRepository).save(any());
     }
 
@@ -118,7 +120,7 @@ class OrderServiceTest {
                 .thenReturn(Optional.of(new ClientSnapshot(1L, "X", "X", false, false)));
 
         assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", null, false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(orderRepository, never()).save(any());
     }
@@ -128,37 +130,42 @@ class OrderServiceTest {
         when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
 
         assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", null, true, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+                TOKEN, "Budi", true, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Treatment");
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void submit_requiresDepartmentForPerDepartmentClient() {
+    void submit_rejectsItemWithoutDepartmentForPerDepartmentClient() {
         when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(true)));
+        when(catalogGateway.findActiveById(10L))
+                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs")));
+        when(pricingGateway.effectivePrice(eq(1L), eq(10L), any()))
+                .thenReturn(Optional.of(new BigDecimal("5000")));
+        when(pricingGateway.departmentForItem(1L, 10L)).thenReturn(Optional.empty());   // not assigned
 
         assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", null, false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("department");
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void submit_appliesTreatmentMultiplier_forPerDepartmentClient() {
+    void submit_appliesTreatmentMultiplier_andStampsLineDepartment_forPerDepartmentClient() {
         when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(true)));
-        when(departmentGateway.existsForClient(7L, 1L)).thenReturn(true);
         stubPricingForItem10();
+        when(pricingGateway.departmentForItem(1L, 10L)).thenReturn(Optional.of(7L));
         when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", 7L, true, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
+                TOKEN, "Budi", true, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
 
         assertThat(result.getPricingMultiplier()).isEqualByComparingTo("2.0");
-        assertThat(result.getLineItems().getFirst().getSubtotal()).isEqualByComparingTo("30000.00");
-        assertThat(result.getDepartmentId()).isEqualTo(7L);
+        assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("30000.00");
+        assertThat(result.getLineItems().getFirst().departmentId()).isEqualTo(7L);
     }
 
     @Test
@@ -166,7 +173,7 @@ class OrderServiceTest {
         when(clientGateway.findById(42L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
-                42L, null, false, null, "Staff", null, null,
+                42L, false, null, "Staff", null, null,
                 List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(NotFoundException.class);
         verify(orderRepository, never()).save(any());
@@ -284,14 +291,13 @@ class OrderServiceTest {
         when(orderRepository.findOpenDeliveries()).thenReturn(List.of(persisted(OrderStatus.DONE)));
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         when(catalogGateway.findActiveById(10L))
-                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs", 1L, "Bed Linen")));
+                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs")));
 
         var views = service.getOpenDeliveries();
 
         assertThat(views).singleElement().satisfies(v -> {
             assertThat(v.orderNumber()).isEqualTo("AYI-20260101-001");
             assertThat(v.clientName()).isEqualTo("Are You and I");
-            assertThat(v.departmentName()).isNull();
             assertThat(v.lines()).singleElement().satisfies(l -> {
                 assertThat(l.itemName()).isEqualTo("Sheet King");
                 assertThat(l.unitName()).isEqualTo("Pcs");
@@ -301,14 +307,15 @@ class OrderServiceTest {
     }
 
     @Test
-    void getPublicOrderForm_showsOnlyTheClientsPricedItems_withUnitAndCategoryNames() {
+    void getPublicOrderForm_showsOnlyTheClientsPricedItems_withDepartment() {
         when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
         // Client has a price only for item 10; item 20 is active but unpriced for this client.
         when(pricingGateway.currentPrices(1L)).thenReturn(List.of(
                 new PricingGateway.ItemPrice(10L, new BigDecimal("5000"))));
+        when(pricingGateway.itemDepartments(1L)).thenReturn(List.of());   // COMBINED — no mappings
         when(catalogGateway.activeItems()).thenReturn(List.of(
-                new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs", 1L, "Bed Linen"),
-                new CatalogGateway.CatalogItem(20L, "Bath Towel", 2L, "Lembar", 2L, "Bath")));
+                new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs"),
+                new CatalogGateway.CatalogItem(20L, "Bath Towel", 2L, "Lembar")));
 
         var view = service.getPublicOrderForm(TOKEN);
 
@@ -316,7 +323,7 @@ class OrderServiceTest {
             assertThat(item.itemId()).isEqualTo(10L);          // unpriced item 20 is excluded
             assertThat(item.name()).isEqualTo("Sheet King");
             assertThat(item.unitName()).isEqualTo("Pcs");
-            assertThat(item.categoryName()).isEqualTo("Bed Linen");
+            assertThat(item.departmentId()).isNull();          // COMBINED client
         });
     }
 }

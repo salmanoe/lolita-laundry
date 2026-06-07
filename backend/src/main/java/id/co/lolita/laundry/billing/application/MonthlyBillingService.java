@@ -20,12 +20,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Generates Monthly Billings and drives their {@code DRAFT → ISSUED → PAID} lifecycle.
@@ -62,13 +64,26 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
 
         List<MonthlyBilling> results = new ArrayList<>();
         if (client.perDepartment()) {
-            for (var group : groupByDepartment(billable).entrySet()) {
-                var orders = group.getValue();
-                results.add(buildAndSave(client, group.getKey(), orders.getFirst().departmentName(),
-                        command.year(), command.month(), orders));
+            // One billing per department; each order contributes its per-department portion.
+            Map<Long, List<MonthlyBillingLine>> linesByDept = new LinkedHashMap<>();
+            Map<Long, String> deptNames = new LinkedHashMap<>();
+            for (var order : billable) {
+                for (var portion : portionsOf(order, true)) {
+                    linesByDept.computeIfAbsent(portion.departmentId(), _ -> new ArrayList<>())
+                            .add(MonthlyBillingLine.of(order.orderId(), order.orderNumber(),
+                                    order.orderDate(), portion.subtotal()));
+                    deptNames.putIfAbsent(portion.departmentId(), portion.departmentName());
+                }
+            }
+            for (var entry : linesByDept.entrySet()) {
+                results.add(buildAndSave(client, entry.getKey(), deptNames.get(entry.getKey()),
+                        command.year(), command.month(), entry.getValue()));
             }
         } else {
-            results.add(buildAndSave(client, null, null, command.year(), command.month(), billable));
+            var lines = billable.stream()
+                    .map(o -> MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), o.total()))
+                    .toList();
+            results.add(buildAndSave(client, null, null, command.year(), command.month(), lines));
         }
         return results;
     }
@@ -105,57 +120,107 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
 
     @Override
     public void sync(Long orderId) {
-        var snapshot = deliveredOrders.findBillableOrder(orderId);   // empty if canceled / gone
-        var existing = billingRepository.findByOrderLine(orderId);   // its current billing, if any
+        var snapshot = deliveredOrders.findBillableOrder(orderId);    // empty if canceled / gone
+        var existing = billingRepository.findAllByOrderLine(orderId); // its current billing(s), if any
 
-        // Canceled / removed → drop from its billing (only while it is still a DRAFT).
+        // Canceled / removed → drop from every billing it is on (only while still DRAFT).
         if (snapshot.isEmpty()) {
-            existing.filter(b -> b.getStatus() == BillingStatus.DRAFT).ifPresent(b -> {
-                b.removeLine(orderId);
-                if (b.isEmpty()) {
-                    billingRepository.deleteById(b.getId());
-                } else {
-                    renderAndAttach(b);
-                    billingRepository.save(b);
+            for (var b : existing) {
+                if (b.getStatus() == BillingStatus.DRAFT) {
+                    dropOrderFrom(b, orderId);
                 }
-            });
-            return;
-        }
-
-        var o = snapshot.get();
-        var line = MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), o.total());
-
-        // Already on a billing → re-price in place if it is still a DRAFT (else it is frozen).
-        if (existing.isPresent()) {
-            var b = existing.get();
-            if (b.getStatus() == BillingStatus.DRAFT) {
-                b.upsertLine(line);
-                renderAndAttach(b);
-                billingRepository.save(b);
             }
             return;
         }
 
-        // Not yet billed → place into the target DRAFT period, rolled forward past closed months.
+        var o = snapshot.get();
         var client = clients.findById(o.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + o.clientId()));
-        var target = resolveTargetDraft(client, o);
-        target.upsertLine(line);
-        renderAndAttach(target);
-        billingRepository.save(target);
+        var portions = portionsOf(o, client.perDepartment());
+        var desiredDeptIds = portions.stream().map(Portion::departmentId).toList();
+
+        // Remove the order from any DRAFT billing whose department it no longer touches
+        // (e.g. an edit moved all of a department's items out of the order).
+        for (var b : existing) {
+            if (b.getStatus() == BillingStatus.DRAFT
+                    && desiredDeptIds.stream().noneMatch(d -> Objects.equals(d, b.getDepartmentId()))) {
+                dropOrderFrom(b, orderId);
+            }
+        }
+
+        // Upsert each department portion into its billing.
+        for (var portion : portions) {
+            var line = MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), portion.subtotal());
+            var billingForDept = existing.stream()
+                    .filter(b -> Objects.equals(b.getDepartmentId(), portion.departmentId()))
+                    .findFirst();
+
+            if (billingForDept.isPresent()) {
+                var b = billingForDept.get();
+                if (b.getStatus() == BillingStatus.DRAFT) {   // frozen billings are left untouched
+                    b.upsertLine(line);
+                    renderAndAttach(b);
+                    billingRepository.save(b);
+                }
+            } else {
+                var target = resolveTargetDraft(client, portion.departmentId(), portion.departmentName(),
+                        o.orderDate());
+                target.upsertLine(line);
+                renderAndAttach(target);
+                billingRepository.save(target);
+            }
+        }
     }
 
     // ── helpers ──
 
     /**
-     * The open DRAFT billing for the order's (client, department, period). Rolls forward one
-     * month at a time while the natural period is already ISSUED/PAID (a closed month), and
-     * starts a fresh empty DRAFT if none exists yet.
+     * A single department's share of one order (departmentId null for COMBINED clients).
      */
-    private MonthlyBilling resolveTargetDraft(ClientInfo client, DeliveredOrder o) {
-        Long departmentId = client.perDepartment() ? o.departmentId() : null;
-        String departmentName = client.perDepartment() ? o.departmentName() : null;
-        var ym = YearMonth.of(o.orderDate().getYear(), o.orderDate().getMonthValue());
+    private record Portion(Long departmentId, String departmentName, BigDecimal subtotal) {
+    }
+
+    /**
+     * Splits a delivered order into per-department portions. COMBINED clients yield a single
+     * department-less portion for the whole order total; PER_DEPARTMENT clients yield one
+     * portion per department the order's line items touch, summing those lines' subtotals.
+     */
+    private List<Portion> portionsOf(DeliveredOrder o, boolean perDepartment) {
+        if (!perDepartment) {
+            return List.of(new Portion(null, null, o.total()));
+        }
+        Map<Long, BigDecimal> subtotalByDept = new LinkedHashMap<>();
+        Map<Long, String> nameByDept = new LinkedHashMap<>();
+        for (var line : o.lines()) {
+            subtotalByDept.merge(line.departmentId(), line.subtotal(), BigDecimal::add);
+            nameByDept.putIfAbsent(line.departmentId(), line.departmentName());
+        }
+        return subtotalByDept.entrySet().stream()
+                .map(e -> new Portion(e.getKey(), nameByDept.get(e.getKey()), e.getValue()))
+                .toList();
+    }
+
+    /**
+     * Removes an order's line from a DRAFT billing, deleting the billing if it becomes empty.
+     */
+    private void dropOrderFrom(MonthlyBilling billing, Long orderId) {
+        billing.removeLine(orderId);
+        if (billing.isEmpty()) {
+            billingRepository.deleteById(billing.getId());
+        } else {
+            renderAndAttach(billing);
+            billingRepository.save(billing);
+        }
+    }
+
+    /**
+     * The open DRAFT billing for the (client, department, period). Rolls forward one month at a
+     * time while the natural period is already ISSUED/PAID (a closed month), and starts a fresh
+     * empty DRAFT if none exists yet.
+     */
+    private MonthlyBilling resolveTargetDraft(ClientInfo client, Long departmentId, String departmentName,
+                                              LocalDate orderDate) {
+        var ym = YearMonth.of(orderDate.getYear(), orderDate.getMonthValue());
         for (int i = 0; i < 60; i++) {   // bounded; the current month is always open
             var existing = billingRepository.findExisting(client.id(), departmentId, ym.getYear(), ym.getMonthValue());
             if (existing.isEmpty()) {
@@ -183,16 +248,8 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         billing.attachPdf(key);
     }
 
-    private Map<Long, List<DeliveredOrder>> groupByDepartment(List<DeliveredOrder> delivered) {
-        Map<Long, List<DeliveredOrder>> byDept = new LinkedHashMap<>();
-        for (var order : delivered) {
-            byDept.computeIfAbsent(order.departmentId(), _ -> new ArrayList<>()).add(order);
-        }
-        return byDept;
-    }
-
     private MonthlyBilling buildAndSave(ClientInfo client, Long departmentId, String departmentName,
-                                        int year, int month, List<DeliveredOrder> orders) {
+                                        int year, int month, List<MonthlyBillingLine> lines) {
         billingRepository.findExisting(client.id(), departmentId, year, month).ifPresent(existing -> {
             if (existing.getStatus() != BillingStatus.DRAFT) {
                 throw new IllegalArgumentException(
@@ -202,9 +259,6 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
             billingRepository.deleteById(existing.getId());
         });
 
-        var lines = orders.stream()
-                .map(o -> MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), o.total()))
-                .toList();
         var billingNumber = buildBillingNumber(client.clientCode(), year, month, departmentId, departmentName);
         var billing = MonthlyBilling.generate(billingNumber, client.id(), departmentId, departmentName, year, month,
                 LocalDate.now(), lines);

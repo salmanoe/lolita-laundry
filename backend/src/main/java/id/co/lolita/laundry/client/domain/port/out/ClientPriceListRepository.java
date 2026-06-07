@@ -17,5 +17,11 @@ public interface ClientPriceListRepository {
      */
     Optional<ClientPriceList> findEffectivePrice(Long clientId, Long itemId, LocalDate asOf);
 
+    /**
+     * The exact price-history row for a client/item on a specific effective date, if one exists.
+     * Backs the "correct this date's price in place" path (avoids the UNIQUE collision).
+     */
+    Optional<ClientPriceList> findExact(Long clientId, Long itemId, LocalDate effectiveDate);
+
     ClientPriceList save(ClientPriceList entry);
 }
