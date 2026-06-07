@@ -31,9 +31,6 @@ class OrderJpaEntity {
     @Column(name = "client_id", nullable = false)
     private Long clientId;
 
-    @Column(name = "department_id")
-    private Long departmentId;
-
     @Column(name = "order_date", nullable = false)
     private LocalDate orderDate;
 
@@ -87,7 +84,6 @@ class OrderJpaEntity {
         this.status = o.getStatus();
         this.dueDate = o.getDueDate();
         this.notes = o.getNotes();
-        this.departmentId = o.getDepartmentId();
     }
 
     /**
@@ -98,8 +94,8 @@ class OrderJpaEntity {
      */
     void reconcileLineItems(List<OrderLineItem> domainLines) {
         boolean unchanged = domainLines.size() == lineItems.size()
-                && domainLines.stream().allMatch(d -> d.getId() != null
-                && lineItems.stream().anyMatch(e -> d.getId().equals(e.getId())));
+                && domainLines.stream().allMatch(d -> d.id() != null
+                && lineItems.stream().anyMatch(e -> d.id().equals(e.getId())));
         if (unchanged) {
             return;
         }
@@ -117,7 +113,7 @@ class OrderJpaEntity {
 
     Order toDomain() {
         var lines = lineItems.stream().map(OrderLineItemJpaEntity::toDomain).toList();
-        return new Order(id, orderNumber, clientId, departmentId, orderDate, dueDate, status,
+        return new Order(id, orderNumber, clientId, orderDate, dueDate, status,
                 pricingMultiplier, submittedByName, notes, createdByUserId, createdAt, lines);
     }
 }

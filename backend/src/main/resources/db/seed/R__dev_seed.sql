@@ -3,50 +3,50 @@
 -- Loaded only under the 'dev' / 'authdev' profiles (spring.flyway.locations adds
 -- classpath:db/seed). Production never sees it.
 -- Repeatable migration (R__) + ON CONFLICT DO NOTHING = safe to re-run.
--- References reference data (units/categories/types) by code via the lookup tables
--- seeded in V2.
+-- References reference data (units/types) by code via the lookup tables seeded in V2.
+-- Item categories were removed in V9 — items have no category; grouping is the per-client
+-- department mapping (client_item_departments), set in Atur Harga.
 -- ============================================================
 
 -- ── Item master (subset of the real catalogue) ──
-INSERT INTO item_master (name, unit_id, category_id)
-SELECT v.name, u.id, c.id
+INSERT INTO item_master (name, unit_id)
+SELECT v.name, u.id
 FROM (VALUES
-    ('Sheet King',        'PCS', 'BED_LINEN'),
-    ('Sheet Queen',       'PCS', 'BED_LINEN'),
-    ('Sheet Single',      'PCS', 'BED_LINEN'),
-    ('Duvet King',        'PCS', 'BED_LINEN'),
-    ('Duvet Single',      'PCS', 'BED_LINEN'),
-    ('Inner Duvet King',  'PCS', 'BED_LINEN'),
-    ('Bed Cover',         'PCS', 'BED_LINEN'),
-    ('Pillow Case',       'PCS', 'BED_LINEN'),
-    ('Bed Runner',        'PCS', 'BED_LINEN'),
-    ('Blanket King',      'PCS', 'BED_LINEN'),
-    ('Bath Towel',        'PCS', 'BATH'),
-    ('Pool Towel',        'PCS', 'BATH'),
-    ('Hand Towel',        'PCS', 'BATH'),
-    ('Face Towel',        'PCS', 'BATH'),
-    ('Bath Mat',          'PCS', 'BATH'),
-    ('Bath Robe',         'PCS', 'BATH'),
-    ('Table Cloth',       'PCS', 'FB'),
-    ('Napkin',            'PCS', 'FB'),
-    ('Table Runner',      'PCS', 'FB'),
-    ('Chair Cover',       'PCS', 'FB'),
-    ('FB Apron',          'PCS', 'FB'),
-    ('T-Shirt',           'PCS', 'UNIFORM'),
-    ('Vest',              'PCS', 'UNIFORM'),
-    ('Jas/Blazer/Jacket', 'PCS', 'UNIFORM'),
-    ('Skirt',             'PCS', 'UNIFORM'),
-    ('Dress',             'PCS', 'UNIFORM'),
-    ('Shirt/Blouse',      'PCS', 'UNIFORM'),
-    ('Trouser/Slack',     'PCS', 'UNIFORM'),
-    ('Duster',            'PCS', 'OTHER'),
-    ('Mop Cover',         'PCS', 'OTHER'),
-    ('Curtain/Black Out', 'M2',  'OTHER'),
-    ('Vitrage',           'M2',  'OTHER'),
-    ('Pillow',            'PCS', 'OTHER')
-) AS v(name, unit_code, cat_code)
-JOIN item_units      u ON u.code = v.unit_code
-JOIN item_categories c ON c.code = v.cat_code
+    ('Sheet King',        'PCS'),
+    ('Sheet Queen',       'PCS'),
+    ('Sheet Single',      'PCS'),
+    ('Duvet King',        'PCS'),
+    ('Duvet Single',      'PCS'),
+    ('Inner Duvet King',  'PCS'),
+    ('Bed Cover',         'PCS'),
+    ('Pillow Case',       'PCS'),
+    ('Bed Runner',        'PCS'),
+    ('Blanket King',      'PCS'),
+    ('Bath Towel',        'PCS'),
+    ('Pool Towel',        'PCS'),
+    ('Hand Towel',        'PCS'),
+    ('Face Towel',        'PCS'),
+    ('Bath Mat',          'PCS'),
+    ('Bath Robe',         'PCS'),
+    ('Table Cloth',       'PCS'),
+    ('Napkin',            'PCS'),
+    ('Table Runner',      'PCS'),
+    ('Chair Cover',       'PCS'),
+    ('FB Apron',          'PCS'),
+    ('T-Shirt',           'PCS'),
+    ('Vest',              'PCS'),
+    ('Jas/Blazer/Jacket', 'PCS'),
+    ('Skirt',             'PCS'),
+    ('Dress',             'PCS'),
+    ('Shirt/Blouse',      'PCS'),
+    ('Trouser/Slack',     'PCS'),
+    ('Duster',            'PCS'),
+    ('Mop Cover',         'PCS'),
+    ('Curtain/Black Out', 'M2'),
+    ('Vitrage',           'M2'),
+    ('Pillow',            'PCS')
+) AS v(name, unit_code)
+JOIN item_units u ON u.code = v.unit_code
 ON CONFLICT (name) DO NOTHING;
 
 -- ── Clients (the 8 real clients; PBS bills per-department) ──

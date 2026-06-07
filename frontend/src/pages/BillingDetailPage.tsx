@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { billingStatusBadge, billingStatusLabel, monthName, nextBillingStatus } from '../lib/labels'
-import type { Client, Department, MonthlyBilling } from '../types/api'
+import type { Client, MonthlyBilling } from '../types/api'
 
 const rupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
@@ -26,13 +26,6 @@ export default function BillingDetailPage() {
     enabled: !!billing,
     queryFn: async () => apiFetch<Client>(`/api/clients/${billing!.clientId}`, { token: await token() }),
   })
-  const deptsQ = useQuery({
-    queryKey: ['departments', billing?.clientId],
-    enabled: !!billing?.departmentId,
-    queryFn: async () =>
-      apiFetch<Department[]>(`/api/clients/${billing!.clientId}/departments`, { token: await token() }),
-  })
-
   const advance = useMutation({
     mutationFn: async (status: string) =>
       apiFetch<MonthlyBilling>(`/api/billing/${billingId}/status`, {
@@ -56,7 +49,7 @@ export default function BillingDetailPage() {
   if (billingQ.isLoading) return <div className="text-sm text-gray-400">Memuat tagihan...</div>
   if (billingQ.error || !billing) return <div className="text-sm text-red-500">Gagal memuat tagihan.</div>
 
-  const deptName = deptsQ.data?.find((d) => d.id === billing.departmentId)?.name
+  const deptName = billing.departmentName
   const next = nextBillingStatus[billing.status]
 
   return (

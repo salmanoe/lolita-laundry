@@ -13,11 +13,12 @@ import java.util.Optional;
 public interface DeliveredOrderGateway {
 
     record InvoiceLine(String itemName, String unit, BigDecimal quantity,
-                       BigDecimal unitPrice, BigDecimal subtotal) {
+                       BigDecimal unitPrice, BigDecimal subtotal,
+                       Long departmentId, String departmentName) {
     }
 
-    record DeliveredOrder(Long orderId, String orderNumber, Long clientId, Long departmentId,
-                          String departmentName, LocalDate orderDate, BigDecimal pricingMultiplier,
+    record DeliveredOrder(Long orderId, String orderNumber, Long clientId,
+                          LocalDate orderDate, BigDecimal pricingMultiplier,
                           BigDecimal total, List<InvoiceLine> lines) {
     }
 

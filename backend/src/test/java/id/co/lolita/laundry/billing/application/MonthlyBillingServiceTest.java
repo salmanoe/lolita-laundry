@@ -67,8 +67,10 @@ class MonthlyBillingServiceTest {
     }
 
     private static DeliveredOrder order(String number, Long deptId, String deptName, String total) {
-        return new DeliveredOrder(System.nanoTime(), number, PBS, deptId, deptName,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal(total), List.of());
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal(total), new BigDecimal(total), deptId, deptName);
+        return new DeliveredOrder(System.nanoTime(), number, PBS,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal(total), List.of(line));
     }
 
     private void stubPdfAndStorageAndSave() {
@@ -208,10 +210,12 @@ class MonthlyBillingServiceTest {
 
     @Test
     void sync_addsBillableOrderToNewDraftPeriod() {
-        var o = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT, null, null,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of());
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);
+        var o = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of(line));
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(o));
-        when(billingRepository.findByOrderLine(77L)).thenReturn(Optional.empty());
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of());
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 6)).thenReturn(Optional.empty());
         stubPdfAndStorageAndSave();
@@ -232,7 +236,7 @@ class MonthlyBillingServiceTest {
         var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
-        when(billingRepository.findByOrderLine(77L)).thenReturn(Optional.of(draft));
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(draft));
 
         service.sync(77L);
 

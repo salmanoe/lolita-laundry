@@ -12,7 +12,7 @@ import java.util.List;
  * exposing the storage key; the PDF is fetched via {@code GET /api/billing/{id}/pdf}.
  */
 public record MonthlyBillingResponse(
-        Long id, String billingNumber, Long clientId, Long departmentId,
+        Long id, String billingNumber, Long clientId, Long departmentId, String departmentName,
         int periodYear, int periodMonth, LocalDate invoiceDate, BigDecimal total,
         BillingStatus status, boolean hasPdf, String notes,
         List<MonthlyBillingLineResponse> lines
@@ -20,7 +20,7 @@ public record MonthlyBillingResponse(
 
     public static MonthlyBillingResponse from(MonthlyBilling b) {
         return new MonthlyBillingResponse(
-                b.getId(), b.getBillingNumber(), b.getClientId(), b.getDepartmentId(),
+                b.getId(), b.getBillingNumber(), b.getClientId(), b.getDepartmentId(), b.getDepartmentName(),
                 b.getPeriodYear(), b.getPeriodMonth(), b.getInvoiceDate(), b.getTotal(),
                 b.getStatus(), b.getPdfUrl() != null && !b.getPdfUrl().isBlank(), b.getNotes(),
                 b.getLines().stream().map(MonthlyBillingLineResponse::from).toList());

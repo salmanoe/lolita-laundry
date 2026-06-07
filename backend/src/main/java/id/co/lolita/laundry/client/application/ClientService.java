@@ -2,9 +2,11 @@ package id.co.lolita.laundry.client.application;
 
 import id.co.lolita.laundry.client.domain.BillingMode;
 import id.co.lolita.laundry.client.domain.Client;
+import id.co.lolita.laundry.client.domain.ClientItemDepartment;
 import id.co.lolita.laundry.client.domain.ClientPriceList;
 import id.co.lolita.laundry.client.domain.Department;
 import id.co.lolita.laundry.client.domain.port.in.*;
+import id.co.lolita.laundry.client.domain.port.out.ClientItemDepartmentRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientPriceListRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientTypeRepository;
@@ -20,8 +22,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(readOnly = true)
@@ -32,6 +36,7 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     private final ClientRepository clientRepository;
     private final DepartmentRepository departmentRepository;
     private final ClientPriceListRepository priceListRepository;
+    private final ClientItemDepartmentRepository itemDepartmentRepository;
     private final ClientTypeRepository clientTypeRepository;
 
     // ── GetClientUseCase ──
@@ -128,21 +133,52 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     // ── ManagePriceListUseCase ──
 
     @Override
-    public List<ClientPriceList> getCurrentPrices(Long clientId) {
-        return priceListRepository.findCurrentPrices(clientId);
+    public List<CurrentPrice> getCurrentPrices(Long clientId) {
+        Map<Long, Long> deptByItem = itemDepartmentRepository.findByClient(clientId).stream()
+                .collect(Collectors.toMap(ClientItemDepartment::itemId, ClientItemDepartment::departmentId));
+        return priceListRepository.findCurrentPrices(clientId).stream()
+                .map(p -> new CurrentPrice(p.itemId(), p.pricePerUnit(), p.effectiveDate(),
+                        deptByItem.get(p.itemId())))
+                .toList();
     }
 
     @Override
     @Transactional
     public ClientPriceList setPrice(SetPriceCommand command) {
-        getClientById(command.clientId());  // 404 if the client doesn't exist (item FK is caught globally)
-        var entry = new ClientPriceList(
-                null, command.clientId(), command.itemId(),
-                command.pricePerUnit(),
-                command.effectiveDate() != null ? command.effectiveDate() : LocalDate.now(),
-                Instant.now()
-        );
+        var client = getClientById(command.clientId());  // 404 if the client doesn't exist
+        applyItemDepartment(client, command.itemId(), command.departmentId());
+        var date = command.effectiveDate() != null ? command.effectiveDate() : LocalDate.now();
+        // A new effective date appends a history row; re-saving an existing date corrects that
+        // row in place (otherwise UNIQUE(client_id, item_id, effective_date) would reject it).
+        var entry = priceListRepository.findExact(command.clientId(), command.itemId(), date)
+                .map(existing -> new ClientPriceList(existing.id(), existing.clientId(), existing.itemId(),
+                        command.pricePerUnit(), existing.effectiveDate(), existing.createdAt()))
+                .orElseGet(() -> new ClientPriceList(
+                        null, command.clientId(), command.itemId(), command.pricePerUnit(), date, Instant.now()));
         return priceListRepository.save(entry);
+    }
+
+    /**
+     * Upserts (or clears) the item→department assignment for a priced item. For a
+     * PER_DEPARTMENT client the department is required and must belong to the client; for a
+     * COMBINED client a department must not be supplied (and any stale mapping is cleared).
+     */
+    private void applyItemDepartment(Client client, Long itemId, Long departmentId) {
+        if (client.getBillingMode() == BillingMode.PER_DEPARTMENT) {
+            if (departmentId == null) {
+                throw new IllegalArgumentException("A department is required when pricing an item for this client");
+            }
+            if (!departmentBelongsToClient(departmentId, client.getId())) {
+                throw new IllegalArgumentException("Department %d does not belong to client %d"
+                        .formatted(departmentId, client.getId()));
+            }
+            itemDepartmentRepository.upsert(client.getId(), itemId, departmentId);
+        } else {
+            if (departmentId != null) {
+                throw new IllegalArgumentException("Department cannot be set for a combined-billing client");
+            }
+            itemDepartmentRepository.delete(client.getId(), itemId);
+        }
     }
 
     // ── ClientDirectoryQuery (cross-module read API) ──
@@ -190,5 +226,17 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
         return priceListRepository.findCurrentPrices(clientId).stream()
                 .map(p -> new PricePoint(p.itemId(), p.pricePerUnit()))
                 .toList();
+    }
+
+    @Override
+    public List<ItemDepartment> itemDepartments(Long clientId) {
+        return itemDepartmentRepository.findByClient(clientId).stream()
+                .map(m -> new ItemDepartment(m.itemId(), m.departmentId()))
+                .toList();
+    }
+
+    @Override
+    public Optional<Long> departmentForItem(Long clientId, Long itemId) {
+        return itemDepartmentRepository.find(clientId, itemId).map(ClientItemDepartment::departmentId);
     }
 }

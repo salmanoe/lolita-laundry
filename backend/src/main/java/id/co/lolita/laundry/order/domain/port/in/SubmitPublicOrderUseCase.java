@@ -13,7 +13,6 @@ public interface SubmitPublicOrderUseCase {
     record SubmitPublicOrderCommand(
             UUID token,
             String submittedByName,
-            Long departmentId,     // required iff the client bills per department
             boolean treatment,     // 2× multiplier — allowed only for per-department clients
             String notes,
             List<OrderLineInput> items

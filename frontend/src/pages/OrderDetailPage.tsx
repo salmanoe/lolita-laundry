@@ -48,7 +48,7 @@ export default function OrderDetailPage() {
   })
   const deptsQ = useQuery({
     queryKey: ['departments', order?.clientId],
-    enabled: !!order?.departmentId,
+    enabled: !!order?.lineItems.some((li) => li.departmentId != null),
     queryFn: async () =>
       apiFetch<Department[]>(`/api/clients/${order!.clientId}/departments`, { token: await token() }),
   })
@@ -87,7 +87,8 @@ export default function OrderDetailPage() {
   if (orderQ.error || !order) return <div className="text-sm text-red-500">Gagal memuat order.</div>
 
   const itemsById = new Map((itemsQ.data ?? []).map((i) => [i.id, i]))
-  const deptName = deptsQ.data?.find((d) => d.id === order.departmentId)?.name
+  const deptNameById = new Map((deptsQ.data ?? []).map((d) => [d.id, d.name]))
+  const showDept = order.lineItems.some((li) => li.departmentId != null)
   const next = nextAdvanceStatus[order.status]
   const editable = order.status === 'RECEIVED' || order.status === 'PROCESSING'
 
@@ -170,7 +171,6 @@ export default function OrderDetailPage() {
       {/* Info */}
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border bg-white p-6 text-sm shadow-sm md:grid-cols-4">
         <Info label="Klien" value={clientQ.data?.name ?? '—'} />
-        {order.departmentId && <Info label="Departemen" value={deptName ?? '—'} />}
         <Info label="Tanggal Order" value={order.orderDate} />
         <Info label="Jatuh Tempo" value={order.dueDate ?? '—'} />
         <Info label="Staff Pengirim" value={order.submittedByName ?? '—'} />
@@ -185,7 +185,7 @@ export default function OrderDetailPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Item', 'Qty', 'Harga Satuan', 'Subtotal'].map((h) => (
+                {['Item', ...(showDept ? ['Departemen'] : []), 'Qty', 'Harga Satuan', 'Subtotal'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -194,6 +194,11 @@ export default function OrderDetailPage() {
               {order.lineItems.map((li) => (
                 <tr key={li.id}>
                   <td className="px-4 py-3 text-gray-800">{itemsById.get(li.itemId)?.name ?? `#${li.itemId}`}</td>
+                  {showDept && (
+                    <td className="px-4 py-3 text-gray-500">
+                      {li.departmentId == null ? '—' : (deptNameById.get(li.departmentId) ?? `#${li.departmentId}`)}
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-gray-500">{li.quantity}</td>
                   <td className="px-4 py-3 text-gray-500">{rupiah(li.priceAtOrder * order.pricingMultiplier)}</td>
                   <td className="px-4 py-3 font-medium text-gray-700">{rupiah(li.subtotal)}</td>
@@ -202,7 +207,7 @@ export default function OrderDetailPage() {
             </tbody>
             <tfoot>
               <tr className="border-t bg-gray-50">
-                <td colSpan={3} className="px-4 py-3 text-right font-medium text-gray-600">Total</td>
+                <td colSpan={showDept ? 4 : 3} className="px-4 py-3 text-right font-medium text-gray-600">Total</td>
                 <td className="px-4 py-3 font-bold text-gray-800">{rupiah(order.total)}</td>
               </tr>
             </tfoot>

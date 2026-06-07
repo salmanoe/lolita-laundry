@@ -20,7 +20,7 @@ export interface Page<T> {
   totalPages: number
 }
 
-/** Reference data (item units, item categories, client types) — managed via Master Data. */
+/** Reference data (item units, client types) — managed via Master Data. */
 export interface Lookup {
   id:          number
   code:        string
@@ -33,7 +33,6 @@ export interface Item {
   id:         number
   name:       string
   unitId:     number   // → item-units lookup
-  categoryId: number   // → item-categories lookup
   active:     boolean
 }
 
@@ -62,9 +61,10 @@ export interface Department {
 }
 
 export interface PriceListEntry {
-  itemId:       number
-  pricePerUnit: number
-  effectiveDate: string   // ISO date string
+  itemId:        number
+  pricePerUnit:  number
+  effectiveDate: string        // ISO date string
+  departmentId:  number | null // item→department mapping (PER_DEPARTMENT clients only)
 }
 
 // ── Orders (Phase 2) ──────────────────────────────────────────────────────────
@@ -88,8 +88,8 @@ export interface OrderFormItem {
   name:         string
   unitId:       number
   unitName:     string | null
-  categoryId:   number
-  categoryName: string | null
+  // Item's department for PER_DEPARTMENT clients (the form groups by it); null for COMBINED.
+  departmentId: number | null
   // Public order-form items omit price (never exposed to hotel staff). The authenticated
   // staff edit screen builds OrderFormItem locally and sets this for its price preview.
   price?:       number
@@ -107,6 +107,7 @@ export interface OrderLineItem {
   quantity:     number
   priceAtOrder: number
   subtotal:     number
+  departmentId: number | null   // item's department snapshot (PER_DEPARTMENT clients only)
 }
 
 /** Full order detail — mirrors OrderResponse. */
@@ -114,7 +115,6 @@ export interface Order {
   id:                number
   orderNumber:       string
   clientId:          number
-  departmentId:      number | null
   orderDate:         string   // ISO date
   dueDate:           string | null
   status:            OrderStatus
@@ -132,7 +132,6 @@ export interface OrderSummary {
   id:                number
   orderNumber:       string
   clientId:          number
-  departmentId:      number | null
   orderDate:         string
   dueDate:           string | null
   status:            OrderStatus
@@ -176,7 +175,6 @@ export interface DriverDelivery {
   orderId:        number
   orderNumber:    string
   clientName:     string
-  departmentName: string | null
   orderDate:      string
   dueDate:        string | null
   status:         OrderStatus
@@ -199,11 +197,12 @@ export interface MonthlyBillingLine {
 
 /** Monthly billing detail — mirrors MonthlyBillingResponse. */
 export interface MonthlyBilling {
-  id:            number
-  billingNumber: string
-  clientId:      number
-  departmentId:  number | null
-  periodYear:    number
+  id:             number
+  billingNumber:  string
+  clientId:       number
+  departmentId:   number | null
+  departmentName: string | null   // denormalized for display (PER_DEPARTMENT clients)
+  periodYear:     number
   periodMonth:   number   // 1-12
   invoiceDate:   string   // ISO date
   total:         number

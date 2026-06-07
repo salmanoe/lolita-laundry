@@ -23,9 +23,11 @@ public interface GetOrderFormUseCase {
         /**
          * Only items the client has a current price for appear on the form. The price value
          * itself is intentionally NOT exposed — hotel staff submit quantities, not prices.
+         * {@code departmentId} is the item's department for PER_DEPARTMENT clients (null for
+         * COMBINED) — the public form groups items by department.
          */
         public record ItemLine(Long itemId, String name, Long unitId, String unitName,
-                               Long categoryId, String categoryName) {
+                               Long departmentId) {
         }
     }
 

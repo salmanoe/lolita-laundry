@@ -30,8 +30,9 @@ class MonthlyBillingJpaAdapter implements MonthlyBillingRepository {
     }
 
     @Override
-    public Optional<MonthlyBilling> findByOrderLine(Long orderId) {
-        return jpaRepository.findByOrderLine(orderId).map(MonthlyBillingJpaEntity::toDomain);
+    public List<MonthlyBilling> findAllByOrderLine(Long orderId) {
+        return jpaRepository.findAllByOrderLine(orderId).stream()
+                .map(MonthlyBillingJpaEntity::toDomain).toList();
     }
 
     @Override

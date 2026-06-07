@@ -8,10 +8,22 @@ import java.util.List;
 
 public interface ManagePriceListUseCase {
 
-    record SetPriceCommand(Long clientId, Long itemId, BigDecimal pricePerUnit, LocalDate effectiveDate) {
+    /**
+     * @param departmentId required for PER_DEPARTMENT clients (the "Atur Harga" item→department
+     *                     assignment), must be null for COMBINED clients.
+     */
+    record SetPriceCommand(Long clientId, Long itemId, BigDecimal pricePerUnit, LocalDate effectiveDate,
+                           Long departmentId) {
     }
 
-    List<ClientPriceList> getCurrentPrices(Long clientId);
+    /**
+     * A client's current effective price for an item, plus its department assignment (null for
+     * COMBINED clients or unassigned items).
+     */
+    record CurrentPrice(Long itemId, BigDecimal pricePerUnit, LocalDate effectiveDate, Long departmentId) {
+    }
+
+    List<CurrentPrice> getCurrentPrices(Long clientId);
 
     ClientPriceList setPrice(SetPriceCommand command);
 }

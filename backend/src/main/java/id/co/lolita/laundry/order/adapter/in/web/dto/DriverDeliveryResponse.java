@@ -15,7 +15,6 @@ public record DriverDeliveryResponse(
         Long orderId,
         String orderNumber,
         String clientName,
-        String departmentName,
         LocalDate orderDate,
         LocalDate dueDate,
         OrderStatus status,
@@ -27,7 +26,7 @@ public record DriverDeliveryResponse(
 
     public static DriverDeliveryResponse from(DriverDeliveryView v) {
         return new DriverDeliveryResponse(
-                v.orderId(), v.orderNumber(), v.clientName(), v.departmentName(),
+                v.orderId(), v.orderNumber(), v.clientName(),
                 v.orderDate(), v.dueDate(), v.status(), v.notes(),
                 v.lines().stream().map(l -> new Line(l.itemName(), l.unitName(), l.quantity())).toList()
         );

@@ -49,14 +49,14 @@ class ItemController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('OWNER')")
     ItemResponse createItem(@Valid @RequestBody CreateItemRequest request) {
-        var command = new CreateItemCommand(request.name(), request.unitId(), request.categoryId());
+        var command = new CreateItemCommand(request.name(), request.unitId());
         return ItemResponse.from(manageItem.createItem(command));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('OWNER')")
     ItemResponse updateItem(@PathVariable Long id, @Valid @RequestBody UpdateItemRequest request) {
-        var command = new UpdateItemCommand(id, request.name(), request.unitId(), request.categoryId(), request.active());
+        var command = new UpdateItemCommand(id, request.name(), request.unitId(), request.active());
         return ItemResponse.from(manageItem.updateItem(command));
     }
 }

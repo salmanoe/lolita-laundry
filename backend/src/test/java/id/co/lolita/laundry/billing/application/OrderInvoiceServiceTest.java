@@ -63,10 +63,10 @@ class OrderInvoiceServiceTest {
     @Test
     void createForDeliveredOrder_buildsInvoice_rendersPdf_andStores() {
         when(invoiceRepository.existsByOrderId(99L)).thenReturn(false);
-        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L, null, null,
+        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
                 List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
-                        new BigDecimal("4000"), new BigDecimal("8000.00"))));
+                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
         when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
@@ -103,10 +103,10 @@ class OrderInvoiceServiceTest {
         var invoice = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
                 LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"));   // no PDF (e.g. backfilled)
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(invoice));
-        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L, null, null,
+        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
                 List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
-                        new BigDecimal("4000"), new BigDecimal("8000.00"))));
+                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
         when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
@@ -137,10 +137,10 @@ class OrderInvoiceServiceTest {
                 LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"));
         invoice.attachPdf("invoices/INV-AYI-20260601-001.pdf");   // already has a PDF — still re-rendered
         when(invoiceRepository.findAll()).thenReturn(List.of(invoice));
-        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L, null, null,
+        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
                 List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
-                        new BigDecimal("4000"), new BigDecimal("8000.00"))));
+                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
         when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});

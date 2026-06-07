@@ -4,7 +4,7 @@ import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { indexById, useLookupList } from '../lib/lookups'
 import OrderItemPicker, { toLineItems, type QuantityMap } from './OrderItemPicker'
-import type { Item, Order, OrderFormItem, PriceListEntry } from '../types/api'
+import type { Department, Item, Order, OrderFormItem, PriceListEntry } from '../types/api'
 
 const rupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
@@ -36,8 +36,16 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
     enabled: open,
     queryFn: async () => apiFetch<PriceListEntry[]>(`/api/clients/${clientId}/prices`, { token: await token() }),
   })
-  const catsById = indexById(useLookupList('item-categories').data)
+  const deptsQ = useQuery({
+    queryKey: ['departments', clientId],
+    enabled: open,
+    queryFn: async () => apiFetch<Department[]>(`/api/clients/${clientId}/departments`, { token: await token() }),
+  })
   const unitsById = indexById(useLookupList('item-units').data)
+  const deptNameById = useMemo(
+    () => new Map((deptsQ.data ?? []).map((d) => [d.id, d.name])),
+    [deptsQ.data],
+  )
 
   const [dueDate, setDueDate] = useState(order.dueDate ?? '')
   const [notes, setNotes] = useState(order.notes ?? '')
@@ -51,7 +59,9 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
   // existing lines remain visible/editable even if their price entry has since changed).
   const pickerItems = useMemo<OrderFormItem[]>(() => {
     const priceById = new Map((pricesQ.data ?? []).map((p) => [p.itemId, p.pricePerUnit]))
+    const priceDeptById = new Map((pricesQ.data ?? []).map((p) => [p.itemId, p.departmentId]))
     const onOrder = new Map(order.lineItems.map((li) => [li.itemId, li.priceAtOrder]))
+    const onOrderDept = new Map(order.lineItems.map((li) => [li.itemId, li.departmentId]))
     return (itemsQ.data ?? [])
       .filter((i) => priceById.has(i.id) || onOrder.has(i.id))
       .map((i) => ({
@@ -59,11 +69,10 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
         name: i.name,
         unitId: i.unitId,
         unitName: unitsById.get(i.unitId)?.displayName ?? null,
-        categoryId: i.categoryId,
-        categoryName: catsById.get(i.categoryId)?.displayName ?? null,
+        departmentId: priceDeptById.get(i.id) ?? onOrderDept.get(i.id) ?? null,
         price: priceById.get(i.id) ?? onOrder.get(i.id) ?? 0,
       }))
-  }, [itemsQ.data, pricesQ.data, order.lineItems, catsById, unitsById])
+  }, [itemsQ.data, pricesQ.data, order.lineItems, unitsById])
 
   const lines = toLineItems(quantities)
   const total = useMemo(() => {
@@ -122,7 +131,7 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
             ) : (
               <OrderItemPicker
                 items={pickerItems}
-                categoryName={(cid) => catsById.get(cid)?.displayName ?? '—'}
+                departmentName={(did) => deptNameById.get(did) ?? '—'}
                 unitName={(uid) => unitsById.get(uid)?.displayName ?? '—'}
                 multiplier={multiplier}
                 quantities={quantities}

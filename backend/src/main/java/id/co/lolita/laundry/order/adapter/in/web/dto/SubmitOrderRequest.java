@@ -11,7 +11,6 @@ import java.util.List;
  */
 public record SubmitOrderRequest(
         @NotBlank String submittedByName,
-        Long departmentId,
         boolean treatment,
         String notes,
         @NotEmpty @Valid List<OrderLineRequest> items

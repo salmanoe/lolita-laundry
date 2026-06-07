@@ -43,15 +43,16 @@ WHERE o.status = 'DELIVERED'
 
 -- ── Monthly billings (+ lines): aggregate DELIVERED orders by order date ──
 -- COMBINED clients → one billing (department_id NULL); PER_DEPARTMENT (PBS) →
--- one per department. Grouped per (client, effective department, year, month).
+-- one per department. Department is line-level (V9), so an order is split into its
+-- per-department portions: one (order, department) row per touched department.
 WITH order_totals AS (
     SELECT o.id              AS order_id,
            o.client_id,
            o.order_number,
            o.order_date,
            c.client_code,
-           -- department only participates for PER_DEPARTMENT clients
-           CASE WHEN c.billing_mode = 'PER_DEPARTMENT' THEN o.department_id END AS eff_dept,
+           -- department only participates for PER_DEPARTMENT clients (taken from the line item)
+           CASE WHEN c.billing_mode = 'PER_DEPARTMENT' THEN li.department_id END AS eff_dept,
            EXTRACT(YEAR  FROM o.order_date)::int AS yr,
            EXTRACT(MONTH FROM o.order_date)::int AS mo,
            SUM(li.subtotal) AS order_total
@@ -59,7 +60,8 @@ WITH order_totals AS (
     JOIN clients c            ON c.id = o.client_id
     JOIN order_line_items li  ON li.order_id = o.id
     WHERE o.status = 'DELIVERED'
-    GROUP BY o.id, o.client_id, o.order_number, o.order_date, c.client_code, c.billing_mode, o.department_id
+    GROUP BY o.id, o.client_id, o.order_number, o.order_date, c.client_code, c.billing_mode,
+             CASE WHEN c.billing_mode = 'PER_DEPARTMENT' THEN li.department_id END
 ),
 groups AS (
     SELECT client_id, client_code, eff_dept, yr, mo, SUM(order_total) AS total

@@ -42,7 +42,9 @@ interface MonthlyBillingJpaRepository extends JpaRepository<MonthlyBillingJpaEnt
             @Param("year") int year,
             @Param("month") int month);
 
-    /** The billing whose lines include the given order (at most one — an order is billed once). */
+    /**
+     * Every billing whose lines include the given order (one per department for PBS).
+     */
     @Query("SELECT l.billing FROM MonthlyBillingLineJpaEntity l WHERE l.orderId = :orderId")
-    Optional<MonthlyBillingJpaEntity> findByOrderLine(@Param("orderId") Long orderId);
+    List<MonthlyBillingJpaEntity> findAllByOrderLine(@Param("orderId") Long orderId);
 }

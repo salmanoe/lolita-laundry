@@ -27,4 +27,16 @@ class PricingGatewayAdapter implements PricingGateway {
                 .map(p -> new ItemPrice(p.itemId(), p.pricePerUnit()))
                 .toList();
     }
+
+    @Override
+    public List<ItemDepartment> itemDepartments(Long clientId) {
+        return pricing.itemDepartments(clientId).stream()
+                .map(d -> new ItemDepartment(d.itemId(), d.departmentId()))
+                .toList();
+    }
+
+    @Override
+    public Optional<Long> departmentForItem(Long clientId, Long itemId) {
+        return pricing.departmentForItem(clientId, itemId);
+    }
 }

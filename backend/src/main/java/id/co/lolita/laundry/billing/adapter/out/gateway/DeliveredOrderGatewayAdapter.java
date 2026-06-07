@@ -45,9 +45,10 @@ class DeliveredOrderGatewayAdapter implements DeliveredOrderGateway {
 
     private static DeliveredOrder toDeliveredOrder(DeliveredOrderQuery.DeliveredOrderDetail d) {
         var lines = d.lines().stream()
-                .map(l -> new InvoiceLine(l.itemName(), l.unit(), l.quantity(), l.unitPrice(), l.subtotal()))
+                .map(l -> new InvoiceLine(l.itemName(), l.unit(), l.quantity(), l.unitPrice(), l.subtotal(),
+                        l.departmentId(), l.departmentName()))
                 .toList();
-        return new DeliveredOrder(d.orderId(), d.orderNumber(), d.clientId(), d.departmentId(),
-                d.departmentName(), d.orderDate(), d.pricingMultiplier(), d.total(), lines);
+        return new DeliveredOrder(d.orderId(), d.orderNumber(), d.clientId(),
+                d.orderDate(), d.pricingMultiplier(), d.total(), lines);
     }
 }

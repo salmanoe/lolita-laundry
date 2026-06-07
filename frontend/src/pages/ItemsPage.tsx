@@ -6,6 +6,7 @@ import ItemFormModal from '../components/ItemFormModal'
 import Pagination from '../components/Pagination'
 import { indexById, useLookupList } from '../lib/lookups'
 import type { Item, Page } from '../types/api'
+// Item category was removed in V9 — items are grouped by the per-client department (Atur Harga).
 
 const SIZE = 10
 
@@ -24,7 +25,6 @@ export default function ItemsPage() {
   })
 
   const unitsById = indexById(useLookupList('item-units').data)
-  const categoriesById = indexById(useLookupList('item-categories').data)
 
   if (isLoading) return <div className="text-sm text-gray-400">Memuat daftar item...</div>
   if (error)    return <div className="text-sm text-red-500">Gagal memuat daftar item.</div>
@@ -47,7 +47,7 @@ export default function ItemsPage() {
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
-              {['Nama', 'Satuan', 'Kategori', 'Status', ''].map((h) => (
+              {['Nama', 'Satuan', 'Status', ''].map((h) => (
                 <th key={h} className="px-4 py-3 text-left font-medium text-gray-500">{h}</th>
               ))}
             </tr>
@@ -57,7 +57,6 @@ export default function ItemsPage() {
               <tr key={item.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-800">{item.name}</td>
                 <td className="px-4 py-3 text-gray-500">{unitsById.get(item.unitId)?.displayName ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-500">{categoriesById.get(item.categoryId)?.displayName ?? '—'}</td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                     item.active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
@@ -77,7 +76,7 @@ export default function ItemsPage() {
             ))}
             {items.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-400">
+                <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
                   Belum ada item. Klik "Tambah Item" untuk menambahkan.
                 </td>
               </tr>

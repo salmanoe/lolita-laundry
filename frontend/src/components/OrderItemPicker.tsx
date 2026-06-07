@@ -9,8 +9,8 @@ export type QuantityMap = Record<number, string>
 
 interface Props {
   items: OrderFormItem[]
-  /** Lookup id → display name for categories and units. */
-  categoryName: (id: number) => string
+  /** Lookup department id → display name. */
+  departmentName: (id: number) => string
   unitName: (id: number) => string
   /** Treatment doubles displayed unit prices (×2) when applicable. Only used when showPrices. */
   multiplier?: number
@@ -20,13 +20,16 @@ interface Props {
   onChange: (next: QuantityMap) => void
 }
 
+const NO_DEPT = -1 // sentinel group key for items without a department (COMBINED clients)
+
 /**
- * Category-grouped item picker for building an order. Parent owns the quantity map;
- * this renders rows + per-line subtotals. A search box appears once there are many items.
+ * Department-grouped item picker for building an order (V9). Items with no department
+ * (COMBINED clients) render as a single flat list with no header. Parent owns the quantity
+ * map; this renders rows + per-line subtotals. A search box appears once there are many items.
  */
 export default function OrderItemPicker({
   items,
-  categoryName,
+  departmentName,
   unitName,
   multiplier = 1,
   showPrices = true,
@@ -40,16 +43,20 @@ export default function OrderItemPicker({
     return q ? items.filter((i) => i.name.toLowerCase().includes(q)) : items
   }, [items, search])
 
-  // Group filtered items by category, preserving the server's item order within each group.
+  // Group filtered items by department, preserving the server's item order within each group.
   const groups = useMemo(() => {
-    const byCat = new Map<number, OrderFormItem[]>()
+    const byDept = new Map<number, OrderFormItem[]>()
     for (const item of filtered) {
-      const list = byCat.get(item.categoryId) ?? []
+      const key = item.departmentId ?? NO_DEPT
+      const list = byDept.get(key) ?? []
       list.push(item)
-      byCat.set(item.categoryId, list)
+      byDept.set(key, list)
     }
-    return [...byCat.entries()].sort((a, b) => categoryName(a[0]).localeCompare(categoryName(b[0])))
-  }, [filtered, categoryName])
+    return [...byDept.entries()].sort((a, b) => departmentName(a[0]).localeCompare(departmentName(b[0])))
+  }, [filtered, departmentName])
+
+  // Headers only matter when items actually belong to departments (PER_DEPARTMENT clients).
+  const showHeaders = groups.some(([key]) => key !== NO_DEPT)
 
   function setQty(itemId: number, value: string) {
     const next = { ...quantities }
@@ -70,11 +77,13 @@ export default function OrderItemPicker({
         />
       )}
 
-      {groups.map(([categoryId, catItems]) => (
-        <div key={categoryId} className="overflow-hidden rounded-lg border bg-white">
-          <div className="bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-            {categoryName(categoryId)}
-          </div>
+      {groups.map(([deptId, catItems]) => (
+        <div key={deptId} className="overflow-hidden rounded-lg border bg-white">
+          {showHeaders && (
+            <div className="bg-gray-50 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {deptId === NO_DEPT ? 'Lainnya' : departmentName(deptId)}
+            </div>
+          )}
           <div className="divide-y divide-gray-100">
             {catItems.map((item) => {
               const raw = quantities[item.itemId] ?? ''

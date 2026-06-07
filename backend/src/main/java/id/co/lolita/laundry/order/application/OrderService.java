@@ -59,6 +59,12 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         Map<Long, BigDecimal> prices = pricingGateway.currentPrices(client.id()).stream()
                 .collect(Collectors.toMap(PricingGateway.ItemPrice::itemId, PricingGateway.ItemPrice::pricePerUnit));
 
+        // Item→department assignments (PER_DEPARTMENT clients only) — the public form groups
+        // items by department on this.
+        Map<Long, Long> itemDepartments = pricingGateway.itemDepartments(client.id()).stream()
+                .collect(Collectors.toMap(PricingGateway.ItemDepartment::itemId,
+                        PricingGateway.ItemDepartment::departmentId));
+
         // Only items the client has a price for (its Daftar Harga) appear on the order form —
         // an unpriced item can't be ordered (order creation rejects it), so don't show it. The
         // price value is used only to filter; it is never exposed on the public form.
@@ -66,7 +72,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
                 .filter(it -> prices.containsKey(it.id()))
                 .map(it -> new OrderFormView.ItemLine(
                         it.id(), it.name(), it.unitId(), it.unitName(),
-                        it.categoryId(), it.categoryName()))
+                        itemDepartments.get(it.id())))
                 .toList();
 
         return new OrderFormView(client.id(), client.name(), client.clientCode(),
@@ -80,7 +86,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     public Order submit(SubmitPublicOrderCommand command) {
         requireName(command.submittedByName());
         var client = activeClientByToken(command.token());
-        return assemble(client, command.departmentId(), command.treatment(), null,
+        return assemble(client, command.treatment(), null,
                 command.submittedByName(), command.notes(), null, command.items());
     }
 
@@ -95,7 +101,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         if (!client.active()) {
             throw new IllegalArgumentException("Client is inactive: " + command.clientId());
         }
-        return assemble(client, command.departmentId(), command.treatment(), command.dueDate(),
+        return assemble(client, command.treatment(), command.dueDate(),
                 command.submittedByName(), command.notes(), command.createdByUserId(), command.items());
     }
 
@@ -138,9 +144,12 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     @Transactional
     public Order updateOrder(UpdateOrderCommand command) {
         var order = loadOrder(command.orderId());
-        List<Order.NewLine> lines = (command.items() == null || command.items().isEmpty())
-                ? null
-                : priceLines(order.getClientId(), order.getOrderDate(), command.items());
+        List<Order.NewLine> lines = null;
+        if (command.items() != null && !command.items().isEmpty()) {
+            boolean perDepartment = clientGateway.findById(order.getClientId())
+                    .map(ClientSnapshot::perDepartment).orElse(false);
+            lines = priceLines(order.getClientId(), perDepartment, order.getOrderDate(), command.items());
+        }
         order.edit(command.dueDate(), command.notes(), lines);
         var saved = orderRepository.save(order);
         eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-price the billing line
@@ -240,20 +249,15 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private DriverDeliveryView toDriverView(Order order) {
         String clientName = clientGateway.findById(order.getClientId())
                 .map(ClientSnapshot::name).orElse("—");
-        String departmentName = order.getDepartmentId() == null ? null
-                : departmentGateway.activeForClient(order.getClientId()).stream()
-                .filter(d -> d.id().equals(order.getDepartmentId()))
-                .map(DepartmentGateway.DepartmentSnapshot::name)
-                .findFirst().orElse(null);
 
         var lines = order.getLineItems().stream().map(li -> {
-            var item = catalogGateway.findActiveById(li.getItemId());
-            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.getItemId());
+            var item = catalogGateway.findActiveById(li.itemId());
+            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.itemId());
             String unit = item.map(CatalogGateway.CatalogItem::unitName).orElse(null);
-            return new DriverLine(name, unit, li.getQuantity());
+            return new DriverLine(name, unit, li.quantity());
         }).toList();
 
-        return new DriverDeliveryView(order.getId(), order.getOrderNumber(), clientName, departmentName,
+        return new DriverDeliveryView(order.getId(), order.getOrderNumber(), clientName,
                 order.getOrderDate(), order.getDueDate(), order.getStatus(), order.getNotes(), lines);
     }
 
@@ -292,60 +296,47 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     }
 
     private DeliveredOrderDetail toDeliveredDetail(Order order) {
-        String departmentName = order.getDepartmentId() == null ? null
-                : departmentGateway.activeForClient(order.getClientId()).stream()
-                .filter(d -> d.id().equals(order.getDepartmentId()))
-                .map(DepartmentGateway.DepartmentSnapshot::name)
-                .findFirst().orElse(null);
+        // Resolve department display names once for the order's client (PER_DEPARTMENT only).
+        Map<Long, String> departmentNames = order.getLineItems().stream().anyMatch(li -> li.departmentId() != null)
+                ? departmentGateway.activeForClient(order.getClientId()).stream()
+                .collect(Collectors.toMap(DepartmentGateway.DepartmentSnapshot::id,
+                        DepartmentGateway.DepartmentSnapshot::name))
+                : Map.of();
 
         var lines = order.getLineItems().stream().map(li -> {
-            var item = catalogGateway.findActiveById(li.getItemId());
-            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.getItemId());
+            var item = catalogGateway.findActiveById(li.itemId());
+            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.itemId());
             String unit = item.map(CatalogGateway.CatalogItem::unitName).orElse(null);
-            return new DeliveredLine(name, unit, li.getQuantity(), li.getPriceAtOrder(), li.getSubtotal());
+            String deptName = li.departmentId() == null ? null : departmentNames.get(li.departmentId());
+            return new DeliveredLine(name, unit, li.quantity(), li.priceAtOrder(), li.subtotal(),
+                    li.departmentId(), deptName);
         }).toList();
 
         return new DeliveredOrderDetail(order.getId(), order.getOrderNumber(), order.getClientId(),
-                order.getDepartmentId(), departmentName, order.getOrderDate(),
-                order.getPricingMultiplier(), order.total(), lines);
+                order.getOrderDate(), order.getPricingMultiplier(), order.total(), lines);
     }
 
     // ── helpers ──
 
-    private Order assemble(ClientSnapshot client, Long departmentId, boolean treatment, LocalDate dueDate,
+    private Order assemble(ClientSnapshot client, boolean treatment, LocalDate dueDate,
                            String submittedByName, String notes, Long createdByUserId, List<OrderLineInput> items) {
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("Order must have at least one item");
         }
 
-        Long resolvedDepartmentId = resolveDepartment(client, departmentId);
         BigDecimal multiplier = resolveMultiplier(client, treatment);
         LocalDate orderDate = LocalDate.now();
 
-        var lines = priceLines(client.id(), orderDate, items);
+        var lines = priceLines(client.id(), client.perDepartment(), orderDate, items);
         var orderNumber = generateOrderNumber(client, orderDate);
 
-        var order = Order.create(orderNumber, client.id(), resolvedDepartmentId, orderDate, dueDate,
+        var order = Order.create(orderNumber, client.id(), orderDate, dueDate,
                 multiplier, submittedByName, notes, createdByUserId, lines, Instant.now());
         var saved = orderRepository.save(order);
         historyRepository.save(OrderStatusHistory.record(
                 saved.getId(), null, OrderStatus.RECEIVED, createdByUserId, "Order created", saved.getCreatedAt()));
         eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // auto-add to the month's billing
         return saved;
-    }
-
-    private Long resolveDepartment(ClientSnapshot client, Long departmentId) {
-        if (!client.perDepartment()) {
-            return null;   // departments are irrelevant for combined-billing clients
-        }
-        if (departmentId == null) {
-            throw new IllegalArgumentException("A department is required for this client");
-        }
-        if (!departmentGateway.existsForClient(departmentId, client.id())) {
-            throw new IllegalArgumentException("Department %d does not belong to client %d"
-                    .formatted(departmentId, client.id()));
-        }
-        return departmentId;
     }
 
     private BigDecimal resolveMultiplier(ClientSnapshot client, boolean treatment) {
@@ -358,7 +349,8 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         return TREATMENT_MULTIPLIER;
     }
 
-    private List<Order.NewLine> priceLines(Long clientId, LocalDate orderDate, List<OrderLineInput> items) {
+    private List<Order.NewLine> priceLines(Long clientId, boolean perDepartment, LocalDate orderDate,
+                                           List<OrderLineInput> items) {
         return items.stream().map(in -> {
             if (in.itemId() == null) {
                 throw new IllegalArgumentException("Each line must reference an item");
@@ -368,7 +360,15 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
             var price = pricingGateway.effectivePrice(clientId, in.itemId(), orderDate)
                     .orElseThrow(() -> new IllegalArgumentException(
                             "No price set for item %d for this client".formatted(in.itemId())));
-            return new Order.NewLine(in.itemId(), in.quantity(), price);
+            // For PER_DEPARTMENT clients each item must be assigned to a department (set in Atur
+            // Harga) — that snapshot routes the line to the right department's monthly billing.
+            Long departmentId = null;
+            if (perDepartment) {
+                departmentId = pricingGateway.departmentForItem(clientId, in.itemId())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "Item %d is not assigned to a department for this client".formatted(in.itemId())));
+            }
+            return new Order.NewLine(in.itemId(), in.quantity(), price, departmentId);
         }).toList();
     }
 

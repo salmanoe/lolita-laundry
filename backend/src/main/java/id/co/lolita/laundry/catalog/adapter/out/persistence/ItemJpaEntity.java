@@ -23,9 +23,6 @@ class ItemJpaEntity {
     @Column(name = "unit_id", nullable = false)
     private Long unitId;
 
-    @Column(name = "category_id", nullable = false)
-    private Long categoryId;
-
     @Column(nullable = false)
     private boolean active = true;
 
@@ -34,12 +31,11 @@ class ItemJpaEntity {
         entity.id = item.getId();
         entity.name = item.getName();
         entity.unitId = item.getUnitId();
-        entity.categoryId = item.getCategoryId();
         entity.active = item.isActive();
         return entity;
     }
 
     ItemMaster toDomain() {
-        return new ItemMaster(id, name, unitId, categoryId, active);
+        return new ItemMaster(id, name, unitId, active);
     }
 }

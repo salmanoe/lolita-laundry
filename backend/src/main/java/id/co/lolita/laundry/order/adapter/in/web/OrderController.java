@@ -67,7 +67,7 @@ class OrderController {
     @ResponseStatus(HttpStatus.CREATED)
     OrderResponse create(@Valid @RequestBody CreateOrderRequest request, Authentication authentication) {
         var command = new CreateOrderCommand(
-                request.clientId(), request.departmentId(), request.treatment(), request.dueDate(),
+                request.clientId(), request.treatment(), request.dueDate(),
                 request.submittedByName(), request.notes(), currentUser.currentUserId(authentication),
                 request.items().stream().map(OrderLineRequest::toInput).toList());
         return OrderResponse.from(createOrder.createOrder(command));

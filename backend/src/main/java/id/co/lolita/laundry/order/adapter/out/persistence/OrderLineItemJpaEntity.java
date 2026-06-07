@@ -35,17 +35,21 @@ class OrderLineItemJpaEntity {
     @Column(nullable = false, precision = 14, scale = 2)
     private BigDecimal subtotal;
 
+    @Column(name = "department_id")
+    private Long departmentId;
+
     static OrderLineItemJpaEntity fromDomain(OrderLineItem li) {
         var e = new OrderLineItemJpaEntity();
-        e.id = li.getId();
-        e.itemId = li.getItemId();
-        e.quantity = li.getQuantity();
-        e.priceAtOrder = li.getPriceAtOrder();
-        e.subtotal = li.getSubtotal();
+        e.id = li.id();
+        e.itemId = li.itemId();
+        e.quantity = li.quantity();
+        e.priceAtOrder = li.priceAtOrder();
+        e.subtotal = li.subtotal();
+        e.departmentId = li.departmentId();
         return e;
     }
 
     OrderLineItem toDomain() {
-        return new OrderLineItem(id, itemId, quantity, priceAtOrder, subtotal);
+        return new OrderLineItem(id, itemId, quantity, priceAtOrder, subtotal, departmentId);
     }
 }
