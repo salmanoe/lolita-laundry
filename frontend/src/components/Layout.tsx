@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
-import { BasketIcon, HomeIcon, HotelIcon, SlidersIcon, TowelsIcon } from './NavIcons'
+import { BasketIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, TowelsIcon } from './NavIcons'
 
 const navItems = [
   { to: '/',        label: 'Dasbor', Icon: HomeIcon },
   { to: '/clients', label: 'Klien',  Icon: HotelIcon },
   { to: '/orders',  label: 'Order',  Icon: BasketIcon },
+  { to: '/billing', label: 'Tagihan', Icon: InvoiceIcon },
   { to: '/items',   label: 'Item',   Icon: TowelsIcon },
   { to: '/master-data', label: 'Master Data', Icon: SlidersIcon },
 ]

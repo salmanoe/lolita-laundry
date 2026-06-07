@@ -1,22 +1,22 @@
 package id.co.lolita.laundry.order.application;
 
-import id.co.lolita.laundry.order.domain.DeliveryConfirmation;
-import id.co.lolita.laundry.order.domain.Order;
-import id.co.lolita.laundry.order.domain.OrderQuery;
-import id.co.lolita.laundry.order.domain.OrderStatus;
-import id.co.lolita.laundry.order.domain.OrderStatusHistory;
+import id.co.lolita.laundry.order.domain.*;
+import id.co.lolita.laundry.order.domain.event.OrderBillingSyncEvent;
+import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
 import id.co.lolita.laundry.order.domain.port.in.*;
 import id.co.lolita.laundry.order.domain.port.out.*;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
 import id.co.lolita.laundry.shared.NotFoundException;
 import id.co.lolita.laundry.shared.Page;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -28,8 +28,8 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, CreateOrderUseCase,
-        GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, DeliverOrderUseCase,
-        GetDriverDeliveriesUseCase {
+        GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, CancelOrderUseCase,
+        DeliverOrderUseCase, GetDriverDeliveriesUseCase, DeliveredOrderQuery {
 
     private static final BigDecimal TREATMENT_MULTIPLIER = new BigDecimal("2.0");
     private static final DateTimeFormatter ORDER_DATE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
@@ -43,6 +43,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private final PricingGateway pricingGateway;
     private final CatalogGateway catalogGateway;
     private final PhotoStoragePort photoStorage;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ── GetOrderFormUseCase ──
 
@@ -141,7 +142,26 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
                 ? null
                 : priceLines(order.getClientId(), order.getOrderDate(), command.items());
         order.edit(command.dueDate(), command.notes(), lines);
-        return orderRepository.save(order);
+        var saved = orderRepository.save(order);
+        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-price the billing line
+        return saved;
+    }
+
+    // ── CancelOrderUseCase ──
+
+    @Override
+    @Transactional
+    public Order cancel(CancelOrderCommand command) {
+        var order = loadOrder(command.orderId());
+        var from = order.getStatus();
+        order.cancel();
+        var saved = orderRepository.save(order);
+        historyRepository.save(OrderStatusHistory.record(
+                saved.getId(), from, OrderStatus.CANCELLED, command.byUserId(),
+                command.notes() == null || command.notes().isBlank() ? "Order dibatalkan" : command.notes(),
+                Instant.now()));
+        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // drop from the billing
+        return saved;
     }
 
     // ── UpdateOrderStatusUseCase ──
@@ -168,13 +188,16 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     @Transactional
     public DeliveryConfirmation deliver(DeliverOrderCommand command) {
         var order = loadOrder(command.orderId());
-        if (order.getStatus() != OrderStatus.DONE) {
-            throw new IllegalArgumentException(
-                    "Only orders at DONE can be delivered (current: %s)".formatted(order.getStatus()));
-        }
         if (command.photo() == null || command.photo().length == 0) {
             throw new IllegalArgumentException("A delivery photo is required");
         }
+
+        // Delivery is allowed from any status except already-DELIVERED: staff may forget to
+        // advance through PROCESSING/DONE, but the laundry still physically gets delivered.
+        // markDelivered() fails fast if a second driver confirms an already-delivered order.
+        var from = order.getStatus();
+        var skipped = from.pathToDelivered();   // intermediate steps + DELIVERED, captured before the move
+        order.markDelivered();
 
         var key = "photos/" + order.getOrderNumber()
                 + extensionFor(command.photoContentType(), command.photoFilename());
@@ -184,11 +207,24 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
                 command.delivererName(), storedKey, command.notes(), Instant.now());
         var saved = deliveryRepository.save(confirmation);
 
-        var from = order.getStatus();
-        order.advanceStatus(OrderStatus.DELIVERED);
         orderRepository.save(order);
-        historyRepository.save(OrderStatusHistory.record(
-                order.getId(), from, OrderStatus.DELIVERED, command.byUserId(), "Order delivered", Instant.now()));
+
+        // Stamp the status history. If staff never advanced the order, autofill the skipped
+        // intermediate steps so the trail reads coherently, all attributed to the delivering user.
+        var instant = Instant.now();
+        var prev = from;
+        for (var next : skipped) {
+            var note = next == OrderStatus.DELIVERED ? "Order delivered" : "Auto-completed at delivery";
+            historyRepository.save(OrderStatusHistory.record(
+                    order.getId(), prev, next, command.byUserId(), note, instant));
+            prev = next;
+        }
+
+        // Notify billing to generate the per-order invoice. Published after the order is saved;
+        // the Modulith JPA registry persists it so the invoice still gets produced if the
+        // listener fails. The listener runs after this transaction commits.
+        eventPublisher.publishEvent(new OrderDeliveredEvent(
+                order.getId(), order.getOrderNumber(), order.getClientId(), saved.getDeliveredAt()));
         return saved;
     }
 
@@ -221,6 +257,59 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
                 order.getOrderDate(), order.getDueDate(), order.getStatus(), order.getNotes(), lines);
     }
 
+    // ── DeliveredOrderQuery (consumed by billing) ──
+
+    @Override
+    public Optional<DeliveredOrderDetail> findDeliveredOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .filter(o -> o.getStatus() == OrderStatus.DELIVERED)
+                .map(this::toDeliveredDetail);
+    }
+
+    @Override
+    public List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, int year, int month) {
+        YearMonth ym = YearMonth.of(year, month);
+        return orderRepository.findDeliveredByClientAndPeriod(
+                        clientId, ym.atDay(1), ym.atEndOfMonth()).stream()
+                .map(this::toDeliveredDetail)
+                .toList();
+    }
+
+    @Override
+    public Optional<DeliveredOrderDetail> findBillableOrder(Long orderId) {
+        return orderRepository.findById(orderId)
+                .filter(o -> o.getStatus() != OrderStatus.CANCELLED)
+                .map(this::toDeliveredDetail);
+    }
+
+    @Override
+    public List<DeliveredOrderDetail> findBillableOrders(Long clientId, int year, int month) {
+        YearMonth ym = YearMonth.of(year, month);
+        return orderRepository.findBillableByClientAndPeriod(
+                        clientId, ym.atDay(1), ym.atEndOfMonth()).stream()
+                .map(this::toDeliveredDetail)
+                .toList();
+    }
+
+    private DeliveredOrderDetail toDeliveredDetail(Order order) {
+        String departmentName = order.getDepartmentId() == null ? null
+                : departmentGateway.activeForClient(order.getClientId()).stream()
+                .filter(d -> d.id().equals(order.getDepartmentId()))
+                .map(DepartmentGateway.DepartmentSnapshot::name)
+                .findFirst().orElse(null);
+
+        var lines = order.getLineItems().stream().map(li -> {
+            var item = catalogGateway.findActiveById(li.getItemId());
+            String name = item.map(CatalogGateway.CatalogItem::name).orElse("#" + li.getItemId());
+            String unit = item.map(CatalogGateway.CatalogItem::unitName).orElse(null);
+            return new DeliveredLine(name, unit, li.getQuantity(), li.getPriceAtOrder(), li.getSubtotal());
+        }).toList();
+
+        return new DeliveredOrderDetail(order.getId(), order.getOrderNumber(), order.getClientId(),
+                order.getDepartmentId(), departmentName, order.getOrderDate(),
+                order.getPricingMultiplier(), order.total(), lines);
+    }
+
     // ── helpers ──
 
     private Order assemble(ClientSnapshot client, Long departmentId, boolean treatment, LocalDate dueDate,
@@ -241,6 +330,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         var saved = orderRepository.save(order);
         historyRepository.save(OrderStatusHistory.record(
                 saved.getId(), null, OrderStatus.RECEIVED, createdByUserId, "Order created", saved.getCreatedAt()));
+        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // auto-add to the month's billing
         return saved;
     }
 

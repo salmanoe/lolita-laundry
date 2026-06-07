@@ -51,11 +51,23 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql")
 
     // ── Spring Modulith 2.0 — module boundary enforcement ──
-    // Use spring-modulith-starter-core only. spring-modulith-starter-jpa adds JPA event
-    // publication (persisted domain events) which requires an event_publication table.
-    // We don't need persisted events in Phase 1 — add the JPA starter in Phase 2 when
-    // domain events are introduced, along with a Flyway migration for the table.
+    // starter-core: module detection + boundary verification.
+    // starter-jpa: JPA-backed event publication registry (persisted domain events) — added
+    // in Phase 3 for the order → billing OrderDeliveredEvent flow. Persisted events survive a
+    // crash between publish and listener completion and are retried on restart. Requires the
+    // event_publication table: created by Flyway V5 in prod/dev; in tests Hibernate ddl-auto
+    // builds it from Modulith's JPA entity (Flyway is disabled there).
     implementation("org.springframework.modulith:spring-modulith-starter-core")
+    implementation("org.springframework.modulith:spring-modulith-starter-jpa")
+
+    // ── JasperReports — Order Invoice + Monthly Billing PDFs (Phase 3) ──
+    // 7.x is the Jakarta-based line (matches Spring Boot 4 / Jakarta EE 11). Split into
+    // feature modules: -pdf adds the OpenPDF export backend, -jdt the Eclipse compiler used
+    // to compile report expressions at fill time. Templates live in resources/reports/*.jrxml
+    // and are compiled at runtime (cached) by JasperPdfAdapter.
+    implementation("net.sf.jasperreports:jasperreports:7.0.1")
+    implementation("net.sf.jasperreports:jasperreports-pdf:7.0.1")
+    implementation("net.sf.jasperreports:jasperreports-jdt:7.0.1")
 
     // ── AWS SDK v2 — S3-compatible (MinIO in dev, Cloudflare R2 in prod) ──
     implementation("software.amazon.awssdk:s3")
