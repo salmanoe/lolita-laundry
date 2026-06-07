@@ -1,6 +1,7 @@
 package id.co.lolita.laundry.billing.adapter.in.web;
 
 import id.co.lolita.laundry.billing.adapter.in.web.dto.OrderInvoiceResponse;
+import id.co.lolita.laundry.billing.domain.port.in.CreateOrderInvoiceUseCase;
 import id.co.lolita.laundry.billing.domain.port.in.GetBillingUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,10 +20,13 @@ import org.springframework.web.bind.annotation.RestController;
 class OrderInvoiceController {
 
     private final GetBillingUseCase billingQuery;
+    private final CreateOrderInvoiceUseCase invoiceWriter;
 
     @GetMapping("/api/orders/{orderId}/invoice")
     OrderInvoiceResponse get(@PathVariable Long orderId) {
-        var invoice = billingQuery.getInvoiceForOrder(orderId);
+        // Lazily renders the PDF if the invoice has none yet (e.g. backfilled invoices),
+        // then returns metadata + a short-lived pre-signed URL. 404 if the order has no invoice.
+        var invoice = invoiceWriter.ensurePdfForOrder(orderId);
         var pdfUrl = billingQuery.getInvoicePdfUrlForOrder(orderId);
         return OrderInvoiceResponse.from(invoice, pdfUrl);
     }

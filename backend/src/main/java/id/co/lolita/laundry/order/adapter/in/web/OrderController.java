@@ -4,6 +4,7 @@ import id.co.lolita.laundry.order.adapter.in.web.dto.*;
 import id.co.lolita.laundry.order.domain.OrderQuery;
 import id.co.lolita.laundry.order.domain.OrderStatus;
 import id.co.lolita.laundry.order.domain.port.in.*;
+import id.co.lolita.laundry.order.domain.port.in.CancelOrderUseCase.CancelOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.UpdateOrderStatusUseCase.AdvanceStatusCommand;
@@ -38,6 +39,7 @@ class OrderController {
     private final CreateOrderUseCase createOrder;
     private final UpdateOrderUseCase updateOrder;
     private final UpdateOrderStatusUseCase updateStatus;
+    private final CancelOrderUseCase cancelOrder;
     private final DeliverOrderUseCase deliverOrder;
     private final CurrentUserResolver currentUser;
 
@@ -85,6 +87,14 @@ class OrderController {
         var command = new AdvanceStatusCommand(
                 id, request.status(), currentUser.currentUserId(authentication), request.notes());
         return OrderResponse.from(updateStatus.advanceStatus(command));
+    }
+
+    @PostMapping("/{id}/cancel")
+    OrderResponse cancel(@PathVariable Long id, @RequestBody(required = false) CancelOrderRequest request,
+                         Authentication authentication) {
+        var notes = request == null ? null : request.notes();
+        return OrderResponse.from(cancelOrder.cancel(
+                new CancelOrderCommand(id, currentUser.currentUserId(authentication), notes)));
     }
 
     @GetMapping("/{id}/history")

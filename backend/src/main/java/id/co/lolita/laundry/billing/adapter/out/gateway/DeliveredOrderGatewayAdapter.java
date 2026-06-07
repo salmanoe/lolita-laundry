@@ -31,6 +31,18 @@ class DeliveredOrderGatewayAdapter implements DeliveredOrderGateway {
                 .toList();
     }
 
+    @Override
+    public Optional<DeliveredOrder> findBillableOrder(Long orderId) {
+        return deliveredOrders.findBillableOrder(orderId).map(DeliveredOrderGatewayAdapter::toDeliveredOrder);
+    }
+
+    @Override
+    public List<DeliveredOrder> findBillableOrders(Long clientId, int year, int month) {
+        return deliveredOrders.findBillableOrders(clientId, year, month).stream()
+                .map(DeliveredOrderGatewayAdapter::toDeliveredOrder)
+                .toList();
+    }
+
     private static DeliveredOrder toDeliveredOrder(DeliveredOrderQuery.DeliveredOrderDetail d) {
         var lines = d.lines().stream()
                 .map(l -> new InvoiceLine(l.itemName(), l.unit(), l.quantity(), l.unitPrice(), l.subtotal()))

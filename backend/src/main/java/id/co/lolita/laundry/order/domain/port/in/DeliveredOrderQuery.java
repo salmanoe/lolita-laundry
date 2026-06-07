@@ -34,7 +34,9 @@ public interface DeliveredOrderQuery {
                                 BigDecimal total, List<DeliveredLine> lines) {
     }
 
-    /** A single delivered order, or empty if the order is unknown or not yet DELIVERED. */
+    /**
+     * A single delivered order, or empty if the order is unknown or not yet DELIVERED.
+     */
     Optional<DeliveredOrderDetail> findDeliveredOrder(Long orderId);
 
     /**
@@ -42,4 +44,17 @@ public interface DeliveredOrderQuery {
      * Ordered by order date ascending. Empty if none.
      */
     List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, int year, int month);
+
+    /**
+     * A single <em>billable</em> order (any status except CANCELLED), or empty if the order is
+     * unknown or canceled. Drives the auto-built monthly billing: present → on the bill,
+     * empty → removed.
+     */
+    Optional<DeliveredOrderDetail> findBillableOrder(Long orderId);
+
+    /**
+     * Every billable (not CANCELLED) order for a client whose order date falls in the given
+     * month, oldest first. Backs the manual billing rebuild.
+     */
+    List<DeliveredOrderDetail> findBillableOrders(Long clientId, int year, int month);
 }

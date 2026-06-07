@@ -34,6 +34,9 @@ class MonthlyBillingJpaEntity {
     @Column(name = "department_id")
     private Long departmentId;
 
+    @Column(name = "department_name", length = 100)
+    private String departmentName;
+
     @Column(name = "period_year", nullable = false)
     private int periodYear;
 
@@ -68,6 +71,7 @@ class MonthlyBillingJpaEntity {
         e.billingNumber = b.getBillingNumber();
         e.clientId = b.getClientId();
         e.departmentId = b.getDepartmentId();
+        e.departmentName = b.getDepartmentName();
         e.periodYear = b.getPeriodYear();
         e.periodMonth = b.getPeriodMonth();
         e.invoiceDate = b.getInvoiceDate();
@@ -84,16 +88,43 @@ class MonthlyBillingJpaEntity {
         return e;
     }
 
-    /** Copies the only mutable fields (status, attached PDF) onto a managed entity. */
+    /**
+     * Copies the mutable fields (status, PDF, total) and reconciles the line set in place.
+     */
     void applyMutable(MonthlyBilling b) {
         this.status = b.getStatus();
         this.pdfUrl = b.getPdfUrl();
+        this.total = b.getTotal();
+        syncLines(b);
+    }
+
+    /**
+     * Reconciles this entity's line rows with the domain billing's lines, in place (update
+     * existing, add new, drop removed) so updates avoid the UNIQUE(billing_id, order_id)
+     * collision a clear-and-reinsert would risk, and keep stable line ids where possible.
+     */
+    private void syncLines(MonthlyBilling b) {
+        var desired = b.getLines();
+        this.lines.removeIf(le -> desired.stream().noneMatch(d -> d.orderId().equals(le.getOrderId())));
+        for (var d : desired) {
+            var match = this.lines.stream()
+                    .filter(le -> le.getOrderId().equals(d.orderId())).findFirst().orElse(null);
+            if (match != null) {
+                match.setOrderNumber(d.orderNumber());
+                match.setOrderDate(d.orderDate());
+                match.setSubtotal(d.subtotal());
+            } else {
+                var ne = MonthlyBillingLineJpaEntity.fromDomain(d);
+                ne.setBilling(this);
+                this.lines.add(ne);
+            }
+        }
     }
 
     MonthlyBilling toDomain() {
         List<MonthlyBillingLine> domainLines = lines.stream()
                 .map(MonthlyBillingLineJpaEntity::toDomain).toList();
-        return new MonthlyBilling(id, billingNumber, clientId, departmentId, periodYear, periodMonth,
+        return new MonthlyBilling(id, billingNumber, clientId, departmentId, departmentName, periodYear, periodMonth,
                 invoiceDate, total, status, pdfUrl, notes, createdAt, domainLines);
     }
 }

@@ -21,7 +21,7 @@ class MonthlyBillingTest {
 
     private static MonthlyBilling draftWith(String... subtotals) {
         var lines = java.util.Arrays.stream(subtotals).map(s -> line("AYI-20260601-001", s)).toList();
-        return MonthlyBilling.generate("BILL-AYI-202606", 1L, null, 2026, 6, LocalDate.now(), lines);
+        return MonthlyBilling.generate("BILL-AYI-202606", 1L, null, null, 2026, 6, LocalDate.now(), lines);
     }
 
     @Test
@@ -36,7 +36,7 @@ class MonthlyBillingTest {
     @Test
     void generate_rejectsEmptyPeriod() {
         assertThatThrownBy(() -> MonthlyBilling.generate(
-                "BILL-AYI-202606", 1L, null, 2026, 6, LocalDate.now(), List.of()))
+                "BILL-AYI-202606", 1L, null, null, 2026, 6, LocalDate.now(), List.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

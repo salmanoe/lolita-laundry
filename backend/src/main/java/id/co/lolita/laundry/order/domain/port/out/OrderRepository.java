@@ -35,4 +35,10 @@ public interface OrderRepository {
      * month), ordered by order date ascending. Backs monthly billing aggregation.
      */
     List<Order> findDeliveredByClientAndPeriod(Long clientId, LocalDate from, LocalDate to);
+
+    /**
+     * Every billable (not CANCELLED) order for a client with an order date in {@code [from, to]},
+     * ordered by order date ascending. Backs the auto-built / rebuilt monthly billing.
+     */
+    List<Order> findBillableByClientAndPeriod(Long clientId, LocalDate from, LocalDate to);
 }

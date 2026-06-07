@@ -10,6 +10,7 @@ import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.InvoiceItemRow;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.OrderInvoiceDocument;
 import id.co.lolita.laundry.billing.domain.port.out.OrderInvoiceRepository;
+import id.co.lolita.laundry.shared.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -55,12 +56,66 @@ class OrderInvoiceService implements CreateOrderInvoiceUseCase {
         var invoice = OrderInvoice.create(invoiceNumber, orderId, order.clientId(),
                 LocalDate.now(), order.total());
 
-        var pdfBytes = pdf.renderOrderInvoice(toDocument(invoice, order, client.name(), client.clientCode()));
-        var key = storage.store("invoices/" + invoiceNumber + ".pdf", pdfBytes);
-        invoice.attachPdf(key);
+        renderStoreAndAttachPdf(invoice, order, client.name(), client.clientCode());
 
         invoiceRepository.save(invoice);
         log.info("Generated order invoice {} for order {}", invoiceNumber, order.orderNumber());
+    }
+
+    @Override
+    public OrderInvoice ensurePdfForOrder(Long orderId) {
+        var invoice = invoiceRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new NotFoundException("No invoice for order " + orderId));
+        if (invoice.getPdfUrl() != null && !invoice.getPdfUrl().isBlank()) {
+            return invoice;   // already rendered
+        }
+
+        var order = deliveredOrders.findDeliveredOrder(orderId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Delivered order not found for invoicing: " + orderId));
+        var client = clients.findById(order.clientId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Client not found for invoicing order " + orderId));
+
+        renderStoreAndAttachPdf(invoice, order, client.name(), client.clientCode());
+        var saved = invoiceRepository.save(invoice);
+        log.info("Lazily rendered PDF for order invoice {} (order {})",
+                invoice.getInvoiceNumber(), order.orderNumber());
+        return saved;
+    }
+
+    @Override
+    public int regenerateAllPdfs() {
+        int count = 0;
+        for (OrderInvoice invoice : invoiceRepository.findAll()) {
+            var order = deliveredOrders.findDeliveredOrder(invoice.getOrderId()).orElse(null);
+            if (order == null) {
+                log.warn("Skipping PDF refresh for invoice {} — delivered order {} not found",
+                        invoice.getInvoiceNumber(), invoice.getOrderId());
+                continue;
+            }
+            var client = clients.findById(order.clientId()).orElse(null);
+            if (client == null) {
+                log.warn("Skipping PDF refresh for invoice {} — client {} not found",
+                        invoice.getInvoiceNumber(), order.clientId());
+                continue;
+            }
+            renderStoreAndAttachPdf(invoice, order, client.name(), client.clientCode());
+            invoiceRepository.save(invoice);
+            count++;
+        }
+        log.info("Refreshed {} order-invoice PDFs", count);
+        return count;
+    }
+
+    /**
+     * Renders the invoice PDF, stores it, and attaches the storage key to the invoice.
+     */
+    private void renderStoreAndAttachPdf(OrderInvoice invoice, DeliveredOrder order,
+                                         String clientName, String clientCode) {
+        var pdfBytes = pdf.renderOrderInvoice(toDocument(invoice, order, clientName, clientCode));
+        var key = storage.store("invoices/" + invoice.getInvoiceNumber() + ".pdf", pdfBytes);
+        invoice.attachPdf(key);
     }
 
     private OrderInvoiceDocument toDocument(OrderInvoice invoice, DeliveredOrder order,

@@ -3,7 +3,9 @@ package id.co.lolita.laundry.billing.adapter.in.web;
 import id.co.lolita.laundry.billing.adapter.in.web.dto.BillingPdfUrlResponse;
 import id.co.lolita.laundry.billing.adapter.in.web.dto.GenerateBillingRequest;
 import id.co.lolita.laundry.billing.adapter.in.web.dto.MonthlyBillingResponse;
+import id.co.lolita.laundry.billing.adapter.in.web.dto.RegeneratePdfsResponse;
 import id.co.lolita.laundry.billing.adapter.in.web.dto.UpdateBillingStatusRequest;
+import id.co.lolita.laundry.billing.domain.port.in.CreateOrderInvoiceUseCase;
 import id.co.lolita.laundry.billing.domain.port.in.GenerateMonthlyBillingUseCase;
 import id.co.lolita.laundry.billing.domain.port.in.GenerateMonthlyBillingUseCase.GenerateCommand;
 import id.co.lolita.laundry.billing.domain.port.in.GetBillingUseCase;
@@ -30,6 +32,7 @@ class BillingController {
     private final GenerateMonthlyBillingUseCase generateBilling;
     private final GetBillingUseCase billingQuery;
     private final UpdateBillingStatusUseCase updateStatus;
+    private final CreateOrderInvoiceUseCase orderInvoices;
 
     @GetMapping
     List<MonthlyBillingResponse> list(
@@ -63,5 +66,17 @@ class BillingController {
     MonthlyBillingResponse updateStatus(@PathVariable Long id, @Valid @RequestBody UpdateBillingStatusRequest request) {
         return MonthlyBillingResponse.from(
                 updateStatus.updateStatus(new UpdateStatusCommand(id, request.status())));
+    }
+
+    /**
+     * Bulk-refresh every billing and order-invoice PDF to the current template (layout-only —
+     * no amounts change). OWNER only; intended for applying a finalized PDF design before go-live.
+     */
+    @PostMapping("/regenerate-all-pdfs")
+    @PreAuthorize("hasRole('OWNER')")
+    RegeneratePdfsResponse regenerateAllPdfs() {
+        int billings = generateBilling.regenerateAllPdfs();
+        int invoices = orderInvoices.regenerateAllPdfs();
+        return new RegeneratePdfsResponse(billings, invoices);
     }
 }

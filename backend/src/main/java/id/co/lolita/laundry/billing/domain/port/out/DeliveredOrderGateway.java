@@ -24,4 +24,10 @@ public interface DeliveredOrderGateway {
     Optional<DeliveredOrder> findDeliveredOrder(Long orderId);
 
     List<DeliveredOrder> findDeliveredOrders(Long clientId, int year, int month);
+
+    /** A single billable (not cancelled) order, or empty if unknown/cancelled. */
+    Optional<DeliveredOrder> findBillableOrder(Long orderId);
+
+    /** Every billable (not cancelled) order for a client in the given month, oldest first. */
+    List<DeliveredOrder> findBillableOrders(Long clientId, int year, int month);
 }

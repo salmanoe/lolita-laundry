@@ -2,7 +2,9 @@ package id.co.lolita.laundry.order.application;
 
 import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderStatus;
+import id.co.lolita.laundry.order.domain.event.OrderBillingSyncEvent;
 import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
+import id.co.lolita.laundry.order.domain.port.in.CancelOrderUseCase;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.OrderLineInput;
@@ -38,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -189,13 +192,30 @@ class OrderServiceTest {
     }
 
     @Test
-    void deliver_rejectedWhenNotDone() {
-        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.PROCESSING)));
+    void deliver_rejectedWhenAlreadyDelivered() {
+        // Concurrency backstop: a second driver confirming an already-delivered order fails cleanly.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DELIVERED)));
 
         assertThatThrownBy(() -> service.deliver(new DeliverOrderCommand(
                 99L, "Rina", "Joko", null, new byte[]{1, 2}, "image/jpeg", "p.jpg", null)))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(photoStorage, never()).store(any(), any(), any());
+    }
+
+    @Test
+    void deliver_allowedFromReceived_autoStampsSkippedSteps() {
+        // Staff never advanced the order — delivery is still allowed and backfills the skipped steps.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
+        when(photoStorage.store(any(), any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(deliveryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2, 3}, "image/jpeg", "proof.jpg", 5L));
+
+        // RECEIVED → PROCESSING → DONE → DELIVERED = three auto-stamped history entries.
+        verify(historyRepository, times(3)).save(any());
+        verify(eventPublisher).publishEvent(any(OrderDeliveredEvent.class));
     }
 
     @Test
@@ -225,6 +245,38 @@ class OrderServiceTest {
         verify(historyRepository).save(any());
         // Billing reacts to this event to generate the order invoice.
         verify(eventPublisher).publishEvent(any(OrderDeliveredEvent.class));
+    }
+
+    @Test
+    void cancel_setsCancelled_recordsHistory_andFiresBillingSync() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.cancel(new CancelOrderUseCase.CancelOrderCommand(99L, 5L, "duplikat"));
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(historyRepository).save(any());
+        // Billing reacts to drop the canceled order from the bill.
+        verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+    }
+
+    @Test
+    void cancel_rejectedWhenDelivered() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DELIVERED)));
+
+        assertThatThrownBy(() -> service.cancel(new CancelOrderUseCase.CancelOrderCommand(99L, 5L, null)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void deliver_rejectedWhenCancelled() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.CANCELLED)));
+
+        assertThatThrownBy(() -> service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2}, "image/jpeg", "p.jpg", null)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verify(photoStorage, never()).store(any(), any(), any());
     }
 
     @Test

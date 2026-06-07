@@ -86,6 +86,37 @@ public class Order {
     }
 
     /**
+     * Marks the order DELIVERED. Allowed from any status <em>except</em> already-DELIVERED:
+     * a driver delivers what they physically have even if staff never advanced the order
+     * through PROCESSING/DONE. The already-DELIVERED guard is the concurrency backstop — if two
+     * drivers grab the same order, the second {@code deliver()} fails once the first commits.
+     */
+    public void markDelivered() {
+        if (status == OrderStatus.DELIVERED) {
+            throw new IllegalArgumentException("Order is already delivered");
+        }
+        if (status == OrderStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cannot deliver a cancelled order");
+        }
+        this.status = OrderStatus.DELIVERED;
+    }
+
+    /**
+     * Cancels (voids) the order — a terminal off-ramp from the normal flow. Allowed from
+     * {@code RECEIVED}, {@code PROCESSING} or {@code DONE}; a delivered order cannot be canceled.
+     * A canceled order drops off the client's monthly billing.
+     */
+    public void cancel() {
+        if (status == OrderStatus.DELIVERED) {
+            throw new IllegalArgumentException("Cannot cancel a delivered order");
+        }
+        if (status == OrderStatus.CANCELLED) {
+            throw new IllegalArgumentException("Order is already cancelled");
+        }
+        this.status = OrderStatus.CANCELLED;
+    }
+
+    /**
      * Edits an in-flight order. Line items, if supplied, are fully replaced and re-priced
      * with the order's multiplier. Allowed only while {@code RECEIVED} or {@code PROCESSING}
      * — once {@code DONE} or {@code DELIVERED} the order is locked.

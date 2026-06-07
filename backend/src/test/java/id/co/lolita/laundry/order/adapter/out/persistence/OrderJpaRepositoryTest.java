@@ -54,10 +54,11 @@ class OrderJpaRepositoryTest {
         repository.save(order("AYI-2", 1L, today.minusDays(1), OrderStatus.DONE));
         repository.save(order("AYI-3", 1L, today, OrderStatus.DELIVERED));
         repository.save(order("AYI-4", 2L, today, OrderStatus.DONE));
+        repository.save(order("AYI-5", 1L, today, OrderStatus.CANCELLED));
 
         var result = repository.findOpenDeliveries();
 
-        // DONE (ready) first ordered by oldest date, then the rest; DELIVERED excluded.
+        // DONE (ready) first ordered by oldest date, then the rest; DELIVERED and CANCELLED excluded.
         assertThat(result).extracting(OrderJpaEntity::getOrderNumber)
                 .containsExactly("AYI-2", "AYI-4", "AYI-1");
     }

@@ -11,6 +11,7 @@ import type {
   Department,
   Item,
   Order,
+  OrderInvoice,
   StatusHistoryEntry,
 } from '../types/api'
 
@@ -65,6 +66,23 @@ export default function OrderDetailPage() {
     },
   })
 
+  // Cancel (void) the order — drops it off the client's monthly billing.
+  const cancel = useMutation({
+    mutationFn: async () => apiFetch<Order>(`/api/orders/${orderId}/cancel`, { method: 'POST', token: await token() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['order', orderId] })
+      qc.invalidateQueries({ queryKey: ['order-history', orderId] })
+    },
+  })
+
+  // Order invoice is generated asynchronously after the delivery commits — fetch a fresh
+  // pre-signed URL on click and open it. A 404 means it isn't ready yet.
+  const openInvoice = useMutation({
+    mutationFn: async () =>
+      apiFetch<OrderInvoice>(`/api/orders/${orderId}/invoice`, { token: await token() }),
+    onSuccess: ({ pdfUrl }) => window.open(pdfUrl, '_blank', 'noopener'),
+  })
+
   if (orderQ.isLoading) return <div className="text-sm text-gray-400">Memuat order...</div>
   if (orderQ.error || !order) return <div className="text-sm text-red-500">Gagal memuat order.</div>
 
@@ -97,6 +115,26 @@ export default function OrderDetailPage() {
                 Ubah Order
               </button>
             )}
+            {order.status === 'DELIVERED' && (
+              <button
+                onClick={() => openInvoice.mutate()}
+                disabled={openInvoice.isPending}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {openInvoice.isPending ? 'Membuka…' : 'Lihat Invoice'}
+              </button>
+            )}
+            {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Batalkan order ini? Order akan dikeluarkan dari tagihan.')) cancel.mutate()
+                }}
+                disabled={cancel.isPending}
+                className="rounded-lg border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                {cancel.isPending ? 'Membatalkan…' : 'Batalkan'}
+              </button>
+            )}
             {next && (
               <button
                 onClick={() => advance.mutate(next)}
@@ -111,6 +149,20 @@ export default function OrderDetailPage() {
         {advance.error && (
           <p className="mt-2 text-sm text-red-500">
             {advance.error instanceof ApiError ? advance.error.detail : 'Gagal mengubah status.'}
+          </p>
+        )}
+        {openInvoice.error && (
+          <p className="mt-2 text-sm text-red-500">
+            {openInvoice.error instanceof ApiError && openInvoice.error.status === 404
+              ? 'Invoice belum siap. Coba lagi sebentar lagi.'
+              : openInvoice.error instanceof ApiError
+                ? openInvoice.error.detail
+                : 'Gagal membuka invoice.'}
+          </p>
+        )}
+        {cancel.error && (
+          <p className="mt-2 text-sm text-red-500">
+            {cancel.error instanceof ApiError ? cancel.error.detail : 'Gagal membatalkan order.'}
           </p>
         )}
       </div>
@@ -210,7 +262,7 @@ function DeliverySection({ orderId, order }: { orderId: number; order: Order }) 
       apiFetch<{ url: string }>(`/api/orders/${orderId}/delivery/photo-url`, { token: await token() }),
   })
 
-  if (order.status === 'RECEIVED' || order.status === 'PROCESSING') return null
+  if (order.status === 'RECEIVED' || order.status === 'PROCESSING' || order.status === 'CANCELLED') return null
 
   if (order.status === 'DONE') {
     return (

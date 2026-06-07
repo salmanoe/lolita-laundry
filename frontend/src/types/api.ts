@@ -69,8 +69,8 @@ export interface PriceListEntry {
 
 // ── Orders (Phase 2) ──────────────────────────────────────────────────────────
 
-/** One-way lifecycle: RECEIVED → PROCESSING → DONE → DELIVERED. */
-export type OrderStatus = 'RECEIVED' | 'PROCESSING' | 'DONE' | 'DELIVERED'
+/** Lifecycle: RECEIVED → PROCESSING → DONE → DELIVERED, with CANCELLED as a terminal off-ramp. */
+export type OrderStatus = 'RECEIVED' | 'PROCESSING' | 'DONE' | 'DELIVERED' | 'CANCELLED'
 
 /** Public order-form payload — mirrors OrderFormResponse. */
 export interface OrderForm {
@@ -182,4 +182,42 @@ export interface DriverDelivery {
   status:         OrderStatus
   notes:          string | null
   lines:          DriverDeliveryLine[]
+}
+
+// ── Billing (Phase 3) ──────────────────────────────────────────────────────────
+
+/** One-way lifecycle: DRAFT → ISSUED → PAID. DRAFT may be regenerated; ISSUED/PAID are locked. */
+export type BillingStatus = 'DRAFT' | 'ISSUED' | 'PAID'
+
+/** One order on a monthly billing — mirrors MonthlyBillingLineResponse. */
+export interface MonthlyBillingLine {
+  orderId:     number
+  orderNumber: string
+  orderDate:   string   // ISO date
+  subtotal:    number
+}
+
+/** Monthly billing detail — mirrors MonthlyBillingResponse. */
+export interface MonthlyBilling {
+  id:            number
+  billingNumber: string
+  clientId:      number
+  departmentId:  number | null
+  periodYear:    number
+  periodMonth:   number   // 1-12
+  invoiceDate:   string   // ISO date
+  total:         number
+  status:        BillingStatus
+  hasPdf:        boolean
+  notes:         string | null
+  lines:         MonthlyBillingLine[]
+}
+
+/** Per-order invoice metadata + a short-lived pre-signed PDF URL — mirrors OrderInvoiceResponse. */
+export interface OrderInvoice {
+  invoiceNumber: string
+  orderId:       number
+  invoiceDate:   string   // ISO date
+  subtotal:      number
+  pdfUrl:        string
 }

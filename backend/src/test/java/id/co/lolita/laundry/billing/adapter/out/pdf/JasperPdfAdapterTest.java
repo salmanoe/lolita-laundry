@@ -1,6 +1,5 @@
 package id.co.lolita.laundry.billing.adapter.out.pdf;
 
-import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.BillingOrderRow;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.InvoiceItemRow;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.MonthlyBillingDocument;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.OrderInvoiceDocument;
@@ -42,11 +41,9 @@ class JasperPdfAdapterTest {
     @Test
     void rendersMonthlyBillingPdf() {
         var doc = new MonthlyBillingDocument(
-                "BILL-PBS-202606-RL", "Juni 2026", "Pasar Baru Square", "PBS", "Room Linen", "30 Juni 2026",
-                List.of(
-                        new BillingOrderRow("PBS-20260601-001", "01/06/2026", "Rp 100.000"),
-                        new BillingOrderRow("PBS-20260615-002", "15/06/2026", "Rp 250.000")),
-                "Rp 350.000");
+                "BILL-PBS-202606-RL", "Pasar Baru Square", "Room Linen", "01/06/26", "2 Days",
+                "Laundry Periode 1 June - 30 June 2026", "Rp 350.000",
+                "Tiga Ratus Lima Puluh Ribu Rupiah");
 
         byte[] pdf = adapter.renderMonthlyBilling(doc);
 

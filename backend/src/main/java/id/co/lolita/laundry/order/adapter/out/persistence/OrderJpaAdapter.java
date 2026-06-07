@@ -66,4 +66,10 @@ class OrderJpaAdapter implements OrderRepository {
         return jpaRepository.findDeliveredByClientAndPeriod(clientId, from, to).stream()
                 .map(OrderJpaEntity::toDomain).toList();
     }
+
+    @Override
+    public List<Order> findBillableByClientAndPeriod(Long clientId, LocalDate from, LocalDate to) {
+        return jpaRepository.findBillableByClientAndPeriod(clientId, from, to).stream()
+                .map(OrderJpaEntity::toDomain).toList();
+    }
 }

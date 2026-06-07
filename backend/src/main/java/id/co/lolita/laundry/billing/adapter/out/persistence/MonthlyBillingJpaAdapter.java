@@ -20,12 +20,18 @@ class MonthlyBillingJpaAdapter implements MonthlyBillingRepository {
         if (billing.getId() == null) {
             entity = MonthlyBillingJpaEntity.newFromDomain(billing);
         } else {
-            // Only status and the attached PDF change after creation; lines are immutable.
+            // Status, attached PDF, total and the line set can all change after creation
+            // (the billing is auto-maintained as orders are received/edited/canceled).
             entity = jpaRepository.findById(billing.getId())
                     .orElseThrow(() -> new IllegalStateException("Billing vanished while saving: " + billing.getId()));
             entity.applyMutable(billing);
         }
         return jpaRepository.save(entity).toDomain();
+    }
+
+    @Override
+    public Optional<MonthlyBilling> findByOrderLine(Long orderId) {
+        return jpaRepository.findByOrderLine(orderId).map(MonthlyBillingJpaEntity::toDomain);
     }
 
     @Override

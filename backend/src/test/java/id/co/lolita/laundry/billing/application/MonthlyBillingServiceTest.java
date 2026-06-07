@@ -2,6 +2,7 @@ package id.co.lolita.laundry.billing.application;
 
 import id.co.lolita.laundry.billing.domain.BillingStatus;
 import id.co.lolita.laundry.billing.domain.MonthlyBilling;
+import id.co.lolita.laundry.billing.domain.MonthlyBillingLine;
 import id.co.lolita.laundry.billing.domain.port.in.GenerateMonthlyBillingUseCase.GenerateCommand;
 import id.co.lolita.laundry.billing.domain.port.in.UpdateBillingStatusUseCase.UpdateStatusCommand;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway;
@@ -14,6 +15,7 @@ import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -78,7 +80,7 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_combinedClient_producesOneBilling() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findDeliveredOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of(
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of(
                 order("AYI-20260601-001", null, null, "5000.00"),
                 order("AYI-20260602-001", null, null, "3000.00")));
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
@@ -98,7 +100,7 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_perDepartmentClient_splitsByDepartment() {
         when(clients.findById(PBS)).thenReturn(Optional.of(perDepartment()));
-        when(deliveredOrders.findDeliveredOrders(PBS, 2026, 6)).thenReturn(List.of(
+        when(deliveredOrders.findBillableOrders(PBS, 2026, 6)).thenReturn(List.of(
                 order("PBS-20260601-001", 10L, "Room Linen", "5000.00"),
                 order("PBS-20260602-001", 10L, "Room Linen", "5000.00"),
                 order("PBS-20260603-001", 20L, "F&B Linen", "3000.00")));
@@ -123,9 +125,9 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_replacesExistingDraft() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findDeliveredOrders(COMBINED_CLIENT, 2026, 6))
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
                 .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
-        var existingDraft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, 2026, 6,
+        var existingDraft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
                 .thenReturn(Optional.of(existingDraft));
@@ -140,9 +142,9 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_rejectsRegenerationOfIssuedBilling() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findDeliveredOrders(COMBINED_CLIENT, 2026, 6))
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
                 .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
-        var issued = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, 2026, 6,
+        var issued = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.ISSUED, null, null, Instant.now(), List.of());
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
                 .thenReturn(Optional.of(issued));
@@ -157,11 +159,11 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_rejectsEmptyPeriod() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findDeliveredOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of());
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.generate(new GenerateCommand(COMBINED_CLIENT, 2026, 6)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("No delivered orders");
+                .hasMessageContaining("Tidak ada order");
         verify(billingRepository, never()).save(any());
     }
 
@@ -175,7 +177,7 @@ class MonthlyBillingServiceTest {
 
     @Test
     void updateStatus_advancesOneStep() {
-        var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, 2026, 6,
+        var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
         when(billingRepository.findById(50L)).thenReturn(Optional.of(draft));
         when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -183,5 +185,58 @@ class MonthlyBillingServiceTest {
         var result = service.updateStatus(new UpdateStatusCommand(50L, BillingStatus.ISSUED));
 
         assertThat(result.getStatus()).isEqualTo(BillingStatus.ISSUED);
+    }
+
+    @Test
+    void regenerateAllPdfs_rerendersEveryBilling_evenIssued() {
+        // A PAID billing with an old PDF — bulk refresh re-renders it (layout-only) without changing status.
+        var paid = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("100.00"), BillingStatus.PAID, "billings/old.pdf", null,
+                Instant.now(), List.of());
+        when(billingRepository.findAll(null, null, null)).thenReturn(List.of(paid));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(eq("billings/BILL-AYI-202606.pdf"), any())).thenReturn("billings/BILL-AYI-202606.pdf");
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        int count = service.regenerateAllPdfs();
+
+        assertThat(count).isEqualTo(1);
+        verify(pdf).renderMonthlyBilling(any());
+        verify(billingRepository).save(paid);
+    }
+
+    @Test
+    void sync_addsBillableOrderToNewDraftPeriod() {
+        var o = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT, null, null,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of());
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(o));
+        when(billingRepository.findByOrderLine(77L)).thenReturn(Optional.empty());
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 6)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(77L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-AYI-202606");
+        assertThat(saved.getTotal()).isEqualByComparingTo("5000.00");
+        assertThat(saved.getLines()).singleElement().satisfies(l -> assertThat(l.orderId()).isEqualTo(77L));
+    }
+
+    @Test
+    void sync_removesCancelledOrderAndDeletesEmptyDraft() {
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.empty());   // cancelled / gone
+        var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(billingRepository.findByOrderLine(77L)).thenReturn(Optional.of(draft));
+
+        service.sync(77L);
+
+        verify(billingRepository).deleteById(50L);   // last line removed → billing deleted
+        verify(billingRepository, never()).save(any());
     }
 }

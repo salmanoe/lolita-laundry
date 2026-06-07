@@ -18,4 +18,11 @@ public interface GenerateMonthlyBillingUseCase {
     }
 
     List<MonthlyBilling> generate(GenerateCommand command);
+
+    /**
+     * Re-renders and re-stores the PDF for every existing billing (layout-only — totals, period
+     * and status are unchanged), so a template change reaches documents already generated,
+     * including ISSUED/PAID ones. Returns how many were refreshed.
+     */
+    int regenerateAllPdfs();
 }

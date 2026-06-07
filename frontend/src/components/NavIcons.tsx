@@ -58,6 +58,17 @@ export function TowelsIcon({ className }: IconProps) {
   )
 }
 
+/** Tagihan — invoice / document with lines. */
+export function InvoiceIcon({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M7 3h7l4 4v12.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+      <path d="M13.5 3v4h4" />
+      <path d="M9 12h6M9 15h6M9 9h2" />
+    </svg>
+  )
+}
+
 /** Master Data — sliders (adjust reference data). */
 export function SlidersIcon({ className }: IconProps) {
   return (

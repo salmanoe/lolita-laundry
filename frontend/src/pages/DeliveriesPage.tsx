@@ -3,12 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
-import { orderStatusBadge } from '../lib/labels'
 import type { DeliveryConfirmation, DriverDelivery } from '../types/api'
 
 export default function DeliveriesPage() {
   const { getAccessTokenSilently } = useAuth()
   const token = async () => getAccessTokenSilently()
+  const [hotel, setHotel] = useState('')
 
   const deliveriesQ = useQuery({
     queryKey: ['driver-deliveries'],
@@ -19,18 +19,38 @@ export default function DeliveriesPage() {
   if (deliveriesQ.error) return <div className="text-sm text-red-500">Gagal memuat pengiriman.</div>
 
   const deliveries = deliveriesQ.data ?? []
+  // Hotel options come from the pool itself — drivers can't call the admin /api/clients endpoint.
+  const hotels = [...new Set(deliveries.map((d) => d.clientName))].sort((a, b) => a.localeCompare(b))
+  const shown = hotel ? deliveries.filter((d) => d.clientName === hotel) : deliveries
 
   return (
     <div className="space-y-4">
-      <h1 className="text-lg font-semibold text-gray-800">Pengiriman</h1>
-      {deliveries.length === 0 && (
+      {/* Screen title lives in the DriverLayout header — no page heading here. */}
+      {deliveries.length > 0 && (
+        <select
+          value={hotel}
+          onChange={(e) => setHotel(e.target.value)}
+          aria-label="Filter hotel"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+        >
+          <option value="">Semua Hotel</option>
+          {hotels.map((h) => (
+            <option key={h} value={h}>{h}</option>
+          ))}
+        </select>
+      )}
+
+      {deliveries.length === 0 ? (
         <p className="rounded-lg border border-dashed bg-white p-8 text-center text-sm text-gray-400">
           Tidak ada order untuk dikirim saat ini.
         </p>
+      ) : shown.length === 0 ? (
+        <p className="rounded-lg border border-dashed bg-white p-8 text-center text-sm text-gray-400">
+          Tidak ada order untuk hotel ini.
+        </p>
+      ) : (
+        shown.map((d) => <DeliveryCard key={d.orderId} delivery={d} />)
       )}
-      {deliveries.map((d) => (
-        <DeliveryCard key={d.orderId} delivery={d} />
-      ))}
     </div>
   )
 }
@@ -40,13 +60,17 @@ function DeliveryCard({ delivery }: { delivery: DriverDelivery }) {
   const [open, setOpen] = useState(false)
 
   return (
-    <div className={`rounded-xl border bg-white shadow-sm ${ready ? '' : 'opacity-60'}`}>
+    <div className="rounded-xl border bg-white shadow-sm">
       <div className="flex items-start justify-between gap-3 p-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-sm font-semibold text-gray-800">{delivery.orderNumber}</span>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${orderStatusBadge[delivery.status]}`}>
-              {ready ? 'Siap dikirim' : 'Belum siap'}
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                ready ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              {ready ? 'Siap dikirim' : 'Belum ditandai Selesai'}
             </span>
           </div>
           <p className="mt-1 text-sm text-gray-700">{delivery.clientName}</p>
@@ -71,20 +95,23 @@ function DeliveryCard({ delivery }: { delivery: DriverDelivery }) {
       </ul>
       {delivery.notes && <p className="px-4 pb-2 text-xs text-gray-500">Catatan: {delivery.notes}</p>}
 
-      {ready && (
-        <div className="border-t p-4">
-          {open ? (
-            <ConfirmForm delivery={delivery} onCancel={() => setOpen(false)} />
-          ) : (
-            <button
-              onClick={() => setOpen(true)}
-              className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700"
-            >
-              Konfirmasi Terkirim
-            </button>
-          )}
-        </div>
-      )}
+      <div className="border-t p-4">
+        {!ready && !open && (
+          <p className="mb-2 text-xs text-amber-600">
+            Order ini belum ditandai Selesai oleh staf — tetap bisa dikonfirmasi bila barang sudah diantar.
+          </p>
+        )}
+        {open ? (
+          <ConfirmForm delivery={delivery} onCancel={() => setOpen(false)} />
+        ) : (
+          <button
+            onClick={() => setOpen(true)}
+            className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Konfirmasi Terkirim
+          </button>
+        )}
+      </div>
     </div>
   )
 }

@@ -12,6 +12,8 @@ import ItemsPage from './pages/ItemsPage'
 import MasterDataPage from './pages/MasterDataPage'
 import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
+import BillingPage from './pages/BillingPage'
+import BillingDetailPage from './pages/BillingDetailPage'
 import PublicOrderPage from './pages/PublicOrderPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -42,6 +44,8 @@ const router = createBrowserRouter([
       { path: 'master-data', element: <MasterDataPage /> },
       { path: 'orders',      element: <OrdersPage /> },
       { path: 'orders/:id',  element: <OrderDetailPage /> },
+      { path: 'billing',     element: <BillingPage /> },
+      { path: 'billing/:id', element: <BillingDetailPage /> },
     ],
   },
   {

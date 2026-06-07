@@ -5,6 +5,7 @@ import id.co.lolita.laundry.billing.domain.port.out.OrderInvoiceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -26,5 +27,10 @@ class OrderInvoiceJpaAdapter implements OrderInvoiceRepository {
     @Override
     public boolean existsByOrderId(Long orderId) {
         return jpaRepository.existsByOrderId(orderId);
+    }
+
+    @Override
+    public List<OrderInvoice> findAll() {
+        return jpaRepository.findAll().stream().map(OrderInvoiceJpaEntity::toDomain).toList();
     }
 }

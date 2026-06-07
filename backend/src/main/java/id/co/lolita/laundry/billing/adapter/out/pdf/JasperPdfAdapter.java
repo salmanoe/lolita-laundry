@@ -21,6 +21,7 @@ import net.sf.jasperreports.engine.type.ModeEnum;
 import net.sf.jasperreports.export.SimpleExporterInput;
 import net.sf.jasperreports.export.SimpleOutputStreamExporterOutput;
 import net.sf.jasperreports.pdf.JRPdfExporter;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.awt.Color;
@@ -48,6 +49,15 @@ class JasperPdfAdapter implements InvoicePdfPort {
     private static final Color HEADER_BG = new Color(0xEE, 0xEE, 0xEE);
     private static final Color RULE = new Color(0xDD, 0xDD, 0xDD);
 
+    // ── Fixed company letterhead / payment details (from the real Lolita invoice template) ──
+    private static final String COMPANY_NAME = "Lolita Laundry";
+    private static final String COMPANY_ADDRESS = "Jl. Sukaraja No. 318 Bandung";
+    private static final String COMPANY_PHONE = "082318359775";
+    private static final String BANK_BENEFICIARY = "Alban Valentino Ramatir";
+    private static final String BANK_NAME = "Bank BCA";
+    private static final String BANK_ACCOUNT = "4061792362";
+    private static final String BANK_HOLDER = "Lolita Laundry";
+
     private volatile JasperReport orderInvoiceReport;
     private volatile JasperReport monthlyBillingReport;
 
@@ -55,15 +65,7 @@ class JasperPdfAdapter implements InvoicePdfPort {
 
     @Override
     public byte[] renderOrderInvoice(OrderInvoiceDocument doc) {
-        Map<String, Object> params = new HashMap<>();
-        params.put("invoiceNumber", doc.invoiceNumber());
-        params.put("invoiceDate", doc.invoiceDate());
-        params.put("clientLine", clientLine(doc.clientName(), doc.clientCode()));
-        params.put("orderNumber", doc.orderNumber());
-        params.put("orderDate", doc.orderDate());
-        params.put("orderTypeLabel", doc.orderTypeLabel());
-        params.put("departmentName", doc.departmentName());
-        params.put("total", doc.total());
+        Map<String, Object> params = getStringObjectMap(doc);
 
         List<Map<String, ?>> rows = new ArrayList<>();
         for (InvoiceItemRow item : doc.items()) {
@@ -78,24 +80,35 @@ class JasperPdfAdapter implements InvoicePdfPort {
         return export(orderInvoiceReport(), params, rows);
     }
 
+    private static @NonNull Map<String, Object> getStringObjectMap(OrderInvoiceDocument doc) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("invoiceNumber", doc.invoiceNumber());
+        params.put("invoiceDate", doc.invoiceDate());
+        params.put("clientLine", clientLine(doc.clientName(), doc.clientCode()));
+        params.put("orderNumber", doc.orderNumber());
+        params.put("orderDate", doc.orderDate());
+        params.put("orderTypeLabel", doc.orderTypeLabel());
+        params.put("departmentName", doc.departmentName());
+        params.put("total", doc.total());
+        return params;
+    }
+
     @Override
     public byte[] renderMonthlyBilling(MonthlyBillingDocument doc) {
         Map<String, Object> params = new HashMap<>();
-        params.put("billingNumber", doc.billingNumber());
-        params.put("periodLabel", doc.periodLabel());
-        params.put("clientLine", clientLine(doc.clientName(), doc.clientCode()));
+        params.put("number", doc.number());
+        params.put("clientName", doc.clientName());
         params.put("departmentName", doc.departmentName());
         params.put("invoiceDate", doc.invoiceDate());
+        params.put("paymentTerms", doc.paymentTerms());
+        params.put("periodDescription", doc.periodDescription());
         params.put("total", doc.total());
+        params.put("amountInWords", doc.amountInWords());
 
+        // The invoice is a single static "Laundry Periode" line — one (empty) record so the
+        // title band, which holds the whole layout, renders exactly once.
         List<Map<String, ?>> rows = new ArrayList<>();
-        for (BillingOrderRow order : doc.orders()) {
-            Map<String, Object> row = new HashMap<>();
-            row.put("orderNumber", order.orderNumber());
-            row.put("orderDate", order.orderDate());
-            row.put("subtotal", order.subtotal());
-            rows.add(row);
-        }
+        rows.add(new HashMap<>());
         return export(monthlyBillingReport(), params, rows);
     }
 
@@ -150,17 +163,20 @@ class JasperPdfAdapter implements InvoicePdfPort {
                     "orderDate", "orderTypeLabel", "departmentName", "total");
             addFields(d, "name", "unit", "quantity", "unitPrice", "subtotal");
 
-            JRDesignBand title = band(150);
-            title.addElement(text("Lolita Laundry", 0, 0, 300, 26, 16f, true, HorizontalTextAlignEnum.LEFT));
-            title.addElement(text("INVOICE", CONTENT_WIDTH - 200, 0, 200, 26, 16f, true, HorizontalTextAlignEnum.RIGHT));
-            title.addElement(rule(0, 32, CONTENT_WIDTH));
-            labelValue(title, "No. Invoice", "invoiceNumber", 0, 46, true);
-            labelValue(title, "Tanggal", "invoiceDate", 0, 64, false);
-            labelValue(title, "Jenis", "orderTypeLabel", 0, 82, false);
-            labelValue(title, "Klien", "clientLine", 280, 46, true);
-            labelValue(title, "Departemen", "departmentName", 280, 64, false);
-            labelValue(title, "No. Order", "orderNumber", 280, 82, false);
-            labelValue(title, "Tgl Order", "orderDate", 280, 100, false);
+            JRDesignBand title = band(172);
+            // Shared letterhead (matches the monthly billing invoice) — itemized layout below.
+            title.addElement(text(COMPANY_NAME, 0, 0, 320, 22, 15f, true, HorizontalTextAlignEnum.LEFT));
+            title.addElement(text(COMPANY_ADDRESS, 0, 22, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            title.addElement(text(COMPANY_PHONE, 0, 36, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            title.addElement(text("INVOICE", 0, 58, CONTENT_WIDTH, 24, 18f, true, HorizontalTextAlignEnum.CENTER));
+            title.addElement(rule(0, 88, CONTENT_WIDTH));
+            labelValue(title, "No. Invoice", "invoiceNumber", 0, 96, true);
+            labelValue(title, "Tanggal", "invoiceDate", 0, 114, false);
+            labelValue(title, "Jenis", "orderTypeLabel", 0, 132, false);
+            labelValue(title, "Klien", "clientLine", 280, 96, true);
+            labelValue(title, "Departemen", "departmentName", 280, 114, false);
+            labelValue(title, "No. Order", "orderNumber", 280, 132, false);
+            labelValue(title, "Tgl Order", "orderDate", 280, 150, false);
             d.setTitle(title);
 
             JRDesignBand head = band(22);
@@ -191,45 +207,75 @@ class JasperPdfAdapter implements InvoicePdfPort {
         }
     }
 
+    /**
+     * Monthly billing = the client-facing INVOICE, laid out to match the real Lolita template:
+     * company letterhead, INVOICE title, hotel + number/date/payment block, a single
+     * "Laundry Periode" line with the total, SUB TOTAL, Terbilang, bank-transfer details and a
+     * signature. The whole document lives in the title band (one render), driven by a one-row
+     * datasource. No detail/column-header bands.
+     */
     private JasperDesign buildMonthlyBillingDesign() {
         try {
             JasperDesign d = baseDesign("monthly_billing");
-            addParameters(d, "billingNumber", "periodLabel", "clientLine", "departmentName", "invoiceDate", "total");
-            addFields(d, "orderNumber", "orderDate", "subtotal");
+            addParameters(d, "number", "clientName", "departmentName", "invoiceDate",
+                    "paymentTerms", "periodDescription", "total", "amountInWords");
 
-            JRDesignBand title = band(140);
-            title.addElement(text("Lolita Laundry", 0, 0, 300, 26, 16f, true, HorizontalTextAlignEnum.LEFT));
-            title.addElement(text("TAGIHAN BULANAN", CONTENT_WIDTH - 250, 0, 250, 26, 14f, true, HorizontalTextAlignEnum.RIGHT));
-            title.addElement(rule(0, 32, CONTENT_WIDTH));
-            labelValue(title, "No. Tagihan", "billingNumber", 0, 46, true);
-            labelValue(title, "Periode", "periodLabel", 0, 64, true);
-            labelValue(title, "Tgl Terbit", "invoiceDate", 0, 82, false);
-            labelValue(title, "Klien", "clientLine", 280, 46, true);
-            labelValue(title, "Departemen", "departmentName", 280, 64, false);
-            d.setTitle(title);
+            JRDesignBand t = band(390);
 
-            JRDesignBand head = band(22);
-            head.addElement(headerCell("No. Order", 0, 300, HorizontalTextAlignEnum.LEFT));
-            head.addElement(headerCell("Tgl Order", 300, 130, HorizontalTextAlignEnum.LEFT));
-            head.addElement(headerCell("Subtotal", 430, 115, HorizontalTextAlignEnum.RIGHT));
-            d.setColumnHeader(head);
+            // Letterhead
+            t.addElement(text(COMPANY_NAME, 0, 0, 320, 22, 15f, true, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text(COMPANY_ADDRESS, 0, 22, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text(COMPANY_PHONE, 0, 36, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text("INVOICE", 0, 58, CONTENT_WIDTH, 24, 18f, true, HorizontalTextAlignEnum.CENTER));
+            t.addElement(rule(0, 88, CONTENT_WIDTH));
 
-            JRDesignBand detail = band(18);
-            detail.addElement(fieldCell("orderNumber", 0, 300, HorizontalTextAlignEnum.LEFT));
-            detail.addElement(fieldCell("orderDate", 300, 130, HorizontalTextAlignEnum.LEFT));
-            detail.addElement(fieldCell("subtotal", 430, 115, HorizontalTextAlignEnum.RIGHT));
-            detail.addElement(rule(0, 17, CONTENT_WIDTH, RULE));
-            detailBand(d, detail);
+            // Hotel (left) + meta (right)
+            t.addElement(text("Nama Hotel", 0, 98, 75, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(paramCell("clientName", 80, 98, 235, 14, 10f, true, HorizontalTextAlignEnum.LEFT));
+            t.addElement(paramCell("departmentName", 80, 114, 235, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            metaRow(t, "Number", "number", 98);
+            metaRow(t, "Date", "invoiceDate", 114);
+            metaRow(t, "Payment", "paymentTerms", 130);
 
-            JRDesignBand summary = band(50);
-            summary.addElement(rule(0, 2, CONTENT_WIDTH));
-            summary.addElement(text("GRAND TOTAL", 265, 12, 160, 22, 13f, true, HorizontalTextAlignEnum.RIGHT));
-            summary.addElement(paramCell("total", 430, 12, 115, 22, 13f, true, HorizontalTextAlignEnum.RIGHT));
-            d.setSummary(summary);
+            // Description table — single period line
+            t.addElement(headerCellAt("No", 0, 158, 45, HorizontalTextAlignEnum.CENTER));
+            t.addElement(headerCellAt("Description", 45, 158, 385, HorizontalTextAlignEnum.LEFT));
+            t.addElement(headerCellAt("Total", 430, 158, 115, HorizontalTextAlignEnum.RIGHT));
+            t.addElement(text("1", 0, 180, 45, 16, 9f, false, HorizontalTextAlignEnum.CENTER));
+            t.addElement(paramCell("periodDescription", 45, 180, 385, 16, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(paramCell("total", 430, 180, 115, 16, 9f, false, HorizontalTextAlignEnum.RIGHT));
+            t.addElement(rule(0, 202, CONTENT_WIDTH, RULE));
+
+            // Subtotal
+            t.addElement(text("SUB TOTAL", 265, 212, 160, 18, 10f, true, HorizontalTextAlignEnum.RIGHT));
+            t.addElement(paramCell("total", 430, 212, 115, 18, 10f, true, HorizontalTextAlignEnum.RIGHT));
+            t.addElement(rule(0, 234, CONTENT_WIDTH));
+
+            // Terbilang
+            t.addElement(text("Terbilang :", 0, 244, 65, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(paramCell("amountInWords", 68, 244, 477, 16, 9f, true, HorizontalTextAlignEnum.LEFT));
+
+            // Bank transfer details
+            t.addElement(text("Please Transfer To", 0, 282, 300, 14, 9f, true, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text(BANK_BENEFICIARY, 0, 298, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text(BANK_NAME, 0, 312, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text("No. Rekening : " + BANK_ACCOUNT, 0, 326, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(text("Nama Pemilik Rekening : " + BANK_HOLDER, 0, 340, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+
+            d.setTitle(t);
             return d;
         } catch (JRException e) {
             throw new IllegalStateException("Failed to build monthly billing design", e);
         }
+    }
+
+    /**
+     * A right-column "label : value" meta line (Number / Date / Payment) on the invoice header.
+     */
+    private static void metaRow(JRDesignBand band, String label, String paramName, int y) {
+        band.addElement(text(label, 320, y, 60, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+        band.addElement(text(":", 382, y, 6, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+        band.addElement(paramCell(paramName, 392, y, 153, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
     }
 
     // ── design helpers ──
@@ -275,7 +321,9 @@ class JasperPdfAdapter implements InvoicePdfPort {
         return b;
     }
 
-    /** A label/value pair: bold-ish label on the left, value field beside it. */
+    /**
+     * A label/value pair: bold-ish label on the left, value field beside it.
+     */
     private static void labelValue(JRDesignBand band, String label, String paramName, int x, int y, boolean boldValue) {
         band.addElement(text(label, x, y, 80, 16, 9f, false, HorizontalTextAlignEnum.LEFT));
         band.addElement(paramCell(paramName, x + 82, y, 183, 16, 9f, boldValue, HorizontalTextAlignEnum.LEFT));
@@ -293,7 +341,14 @@ class JasperPdfAdapter implements InvoicePdfPort {
     }
 
     private static JRDesignStaticText headerCell(String value, int x, int w, HorizontalTextAlignEnum align) {
-        var t = text(value, x, 0, w, 20, 9f, true, align);
+        return headerCellAt(value, x, 0, w, align);
+    }
+
+    /**
+     * Opaque gray header cell at an explicit y (for layouts built inside a single band).
+     */
+    private static JRDesignStaticText headerCellAt(String value, int x, int y, int w, HorizontalTextAlignEnum align) {
+        var t = text(value, x, y, w, 20, 9f, true, align);
         t.setMode(ModeEnum.OPAQUE);
         t.setBackcolor(HEADER_BG);
         return t;

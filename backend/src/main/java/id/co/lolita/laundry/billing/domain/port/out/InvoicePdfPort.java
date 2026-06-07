@@ -9,24 +9,28 @@ import java.util.List;
  */
 public interface InvoicePdfPort {
 
-    /** A line on the itemized Order Invoice. */
+    /**
+     * A line on the itemized Order Invoice.
+     */
     record InvoiceItemRow(String name, String unit, String quantity, String unitPrice, String subtotal) {
     }
 
-    /** Everything the Order Invoice template needs. */
+    /**
+     * Everything the Order Invoice template needs.
+     */
     record OrderInvoiceDocument(String invoiceNumber, String invoiceDate, String clientName, String clientCode,
                                 String orderNumber, String orderDate, String orderTypeLabel,
                                 String departmentName, List<InvoiceItemRow> items, String total) {
     }
 
-    /** A line on the Monthly Billing (one delivered order). */
-    record BillingOrderRow(String orderNumber, String orderDate, String subtotal) {
-    }
-
-    /** Everything the Monthly Billing template needs. */
-    record MonthlyBillingDocument(String billingNumber, String periodLabel, String clientName, String clientCode,
-                                  String departmentName, String invoiceDate, List<BillingOrderRow> orders,
-                                  String total) {
+    /**
+     * Everything the Monthly Billing invoice template needs. The client-facing document is a
+     * single "Laundry Periode" line with the grand total (the per-order breakdown lives in the
+     * app UI, not on the invoice), plus the Terbilang amount-in-words.
+     */
+    record MonthlyBillingDocument(String number, String clientName, String departmentName, String invoiceDate,
+                                  String paymentTerms, String periodDescription, String total,
+                                  String amountInWords) {
     }
 
     byte[] renderOrderInvoice(OrderInvoiceDocument document);

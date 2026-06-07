@@ -11,7 +11,7 @@ const SIZE = 10
 const rupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
 
-const STATUSES: OrderStatus[] = ['RECEIVED', 'PROCESSING', 'DONE', 'DELIVERED']
+const STATUSES: OrderStatus[] = ['RECEIVED', 'PROCESSING', 'DONE', 'DELIVERED', 'CANCELLED']
 
 export default function OrdersPage() {
   const { getAccessTokenSilently } = useAuth()
