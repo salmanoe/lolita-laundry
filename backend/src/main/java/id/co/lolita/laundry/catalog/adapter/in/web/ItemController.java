@@ -25,8 +25,10 @@ class ItemController {
     private final GetItemsUseCase getItems;
     private final ManageItemUseCase manageItem;
 
+    // Item management screen is OWNER-only (the paginated list backs ItemsPage). STAFF still
+    // resolve item names/units through /options for orders and price-setting.
     @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasRole('OWNER')")
     Page<ItemResponse> listItems(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,

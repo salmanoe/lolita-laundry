@@ -26,8 +26,10 @@ class CompanyProfileController {
     private final GetCompanyProfileUseCase getProfile;
     private final UpdateCompanyProfileUseCase updateProfile;
 
+    // Master Data screen is OWNER-only. PDFs read the profile via the settings::api gateway,
+    // not this endpoint, so locking the REST read to OWNER does not affect billing rendering.
     @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasRole('OWNER')")
     CompanyProfileResponse get() {
         return CompanyProfileResponse.from(getProfile.get());
     }

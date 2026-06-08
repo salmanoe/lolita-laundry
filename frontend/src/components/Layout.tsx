@@ -11,8 +11,8 @@ const navItems = [
   { to: '/orders',  label: 'Order',  Icon: BasketIcon },
   { to: '/billing', label: 'Tagihan', Icon: InvoiceIcon },
   { to: '/reports', label: 'Laporan', Icon: ChartIcon },
-  { to: '/items',   label: 'Item',   Icon: TowelsIcon },
-  { to: '/master-data', label: 'Master Data', Icon: SlidersIcon },
+  { to: '/items',   label: 'Item',   Icon: TowelsIcon, ownerOnly: true },
+  { to: '/master-data', label: 'Master Data', Icon: SlidersIcon, ownerOnly: true },
   { to: '/users',   label: 'Pengguna', Icon: UsersIcon, ownerOnly: true },
 ]
 
