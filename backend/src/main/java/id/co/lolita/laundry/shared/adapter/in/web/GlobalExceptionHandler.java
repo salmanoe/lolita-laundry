@@ -3,6 +3,7 @@ package id.co.lolita.laundry.shared.adapter.in.web;
 import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -43,6 +44,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     ProblemDetail handleConflict(ConflictException ex) {
         var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        return problem;
+    }
+
+    /**
+     * Optimistic-lock collision (KI-6): two transactions modified the same {@code orders} or
+     * {@code monthly_billings} row and the stale one lost the {@code @Version} check. Surface a
+     * retryable 409 instead of a raw 500 so the caller can reload and retry.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLock(OptimisticLockingFailureException ex) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Data ini baru saja diubah oleh proses lain. Muat ulang lalu coba lagi.");
         problem.setTitle("Conflict");
         return problem;
     }

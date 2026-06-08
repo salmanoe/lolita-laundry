@@ -8,6 +8,7 @@ import id.co.lolita.laundry.client.domain.port.in.ClientDirectoryQuery;
 import id.co.lolita.laundry.client.domain.port.in.ManageClientUseCase.CreateClientCommand;
 import id.co.lolita.laundry.client.domain.port.in.ManageDepartmentUseCase.CreateDepartmentCommand;
 import id.co.lolita.laundry.client.domain.port.in.ManagePriceListUseCase.SetPriceCommand;
+import id.co.lolita.laundry.client.domain.port.out.ClientItemDepartmentRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientPriceListRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientTypeRepository;
@@ -46,6 +47,8 @@ class ClientServiceTest {
     DepartmentRepository departmentRepository;
     @Mock
     ClientPriceListRepository priceListRepository;
+    @Mock
+    ClientItemDepartmentRepository itemDepartmentRepository;
     @Mock
     ClientTypeRepository clientTypeRepository;
     @InjectMocks
