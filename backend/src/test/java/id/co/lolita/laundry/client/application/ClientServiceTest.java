@@ -3,10 +3,11 @@ package id.co.lolita.laundry.client.application;
 import id.co.lolita.laundry.client.domain.BillingMode;
 import id.co.lolita.laundry.client.domain.Client;
 import id.co.lolita.laundry.client.domain.ClientType;
+import id.co.lolita.laundry.client.domain.Department;
+import id.co.lolita.laundry.client.domain.port.in.ClientDirectoryQuery;
 import id.co.lolita.laundry.client.domain.port.in.ManageClientUseCase.CreateClientCommand;
 import id.co.lolita.laundry.client.domain.port.in.ManageDepartmentUseCase.CreateDepartmentCommand;
 import id.co.lolita.laundry.client.domain.port.in.ManagePriceListUseCase.SetPriceCommand;
-import id.co.lolita.laundry.client.domain.port.out.ClientItemDepartmentRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientPriceListRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientTypeRepository;
@@ -20,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,8 +46,6 @@ class ClientServiceTest {
     DepartmentRepository departmentRepository;
     @Mock
     ClientPriceListRepository priceListRepository;
-    @Mock
-    ClientItemDepartmentRepository itemDepartmentRepository;
     @Mock
     ClientTypeRepository clientTypeRepository;
     @InjectMocks
@@ -111,6 +111,20 @@ class ClientServiceTest {
         assertThatThrownBy(() -> service.createDepartment(new CreateDepartmentCommand(99L, "Room Linen")))
                 .isInstanceOf(NotFoundException.class);
         verify(departmentRepository, never()).save(any());
+    }
+
+    @Test
+    void allDepartments_includesInactive_whileActiveDepartmentsFiltersThem() {
+        // KI-5: historical labels (billing/invoice) resolve a deactivated department's name; the
+        // order-form path stays active-only. Departments are soft-deactivated, never deleted.
+        var roomLinen = new Department(10L, 1L, "Room Linen", true);
+        var oldFnb = new Department(20L, 1L, "F&B Linen", false);   // deactivated
+        when(departmentRepository.findByClientId(1L)).thenReturn(List.of(roomLinen, oldFnb));
+
+        assertThat(service.allDepartments(1L)).extracting(ClientDirectoryQuery.DepartmentView::name)
+                .containsExactly("Room Linen", "F&B Linen");
+        assertThat(service.activeDepartments(1L)).extracting(ClientDirectoryQuery.DepartmentView::name)
+                .containsExactly("Room Linen");
     }
 
     @Test

@@ -331,8 +331,10 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
     private DeliveredOrderDetail toDeliveredDetail(Order order) {
         // Resolve department display names once for the order's client (PER_DEPARTMENT only).
+        // Use all departments (incl. inactive): these are historical labels for an existing order,
+        // so a department deactivated after the order was placed must still resolve its name (KI-5).
         Map<Long, String> departmentNames = order.getLineItems().stream().anyMatch(li -> li.departmentId() != null)
-                ? departmentGateway.activeForClient(order.getClientId()).stream()
+                ? departmentGateway.allForClient(order.getClientId()).stream()
                 .collect(Collectors.toMap(DepartmentGateway.DepartmentSnapshot::id,
                         DepartmentGateway.DepartmentSnapshot::name))
                 : Map.of();

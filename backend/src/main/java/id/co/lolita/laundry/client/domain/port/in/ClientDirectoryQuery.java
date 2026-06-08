@@ -18,13 +18,24 @@ public interface ClientDirectoryQuery {
     record DepartmentView(Long id, String name) {
     }
 
-    /** Looks up a client by its public order token (active and inactive — caller decides). */
+    /**
+     * Looks up a client by its public order token (active and inactive — caller decides).
+     */
     Optional<ClientView> findByToken(UUID token);
 
     Optional<ClientView> findById(Long clientId);
 
-    /** Active departments for a client (empty unless the client bills per department). */
+    /**
+     * Active departments for a client (empty unless the client bills per department).
+     */
     List<DepartmentView> activeDepartments(Long clientId);
+
+    /**
+     * Every department for a client, active <em>and</em> inactive. Used to label historical data
+     * (delivered orders, invoices, monthly billings) so a department deactivated after the fact
+     * still resolves its name — departments are soft-deactivated, never deleted.
+     */
+    List<DepartmentView> allDepartments(Long clientId);
 
     boolean departmentBelongsToClient(Long departmentId, Long clientId);
 }
