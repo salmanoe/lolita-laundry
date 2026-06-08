@@ -2,12 +2,14 @@ package id.co.lolita.laundry.order.adapter.out.persistence;
 
 import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderQuery;
+import id.co.lolita.laundry.order.domain.OrderStatus;
 import id.co.lolita.laundry.order.domain.port.out.OrderRepository;
 import id.co.lolita.laundry.shared.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -71,5 +73,21 @@ class OrderJpaAdapter implements OrderRepository {
     public List<Order> findBillableByClientAndPeriod(Long clientId, LocalDate from, LocalDate to) {
         return jpaRepository.findBillableByClientAndPeriod(clientId, from, to).stream()
                 .map(OrderJpaEntity::toDomain).toList();
+    }
+
+    @Override
+    public List<Order> findBillableInPeriod(LocalDate from, LocalDate to) {
+        return jpaRepository.findBillableInPeriod(from, to).stream()
+                .map(OrderJpaEntity::toDomain).toList();
+    }
+
+    @Override
+    public long countByOrderDate(LocalDate date) {
+        return jpaRepository.countByOrderDate(date);
+    }
+
+    @Override
+    public long countByStatuses(Collection<OrderStatus> statuses) {
+        return jpaRepository.countByStatusIn(statuses);
     }
 }

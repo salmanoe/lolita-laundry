@@ -79,4 +79,21 @@ interface OrderJpaRepository extends JpaRepository<OrderJpaEntity, Long> {
             @Param("to") LocalDate to,
             Pageable pageable
     );
+
+    /**
+     * Billable orders (not CANCELLED) across all clients with an order date in {@code [from, to]} —
+     * the Phase 4 dashboard/report aggregation set. Oldest first.
+     */
+    @Query("""
+            SELECT o FROM OrderJpaEntity o
+            WHERE o.status <> id.co.lolita.laundry.order.domain.OrderStatus.CANCELLED
+              AND o.orderDate >= :from
+              AND o.orderDate <= :to
+            ORDER BY o.orderDate ASC, o.id ASC
+            """)
+    List<OrderJpaEntity> findBillableInPeriod(@Param("from") LocalDate from, @Param("to") LocalDate to);
+
+    long countByOrderDate(LocalDate date);
+
+    long countByStatusIn(java.util.Collection<OrderStatus> statuses);
 }

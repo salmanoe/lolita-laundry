@@ -14,6 +14,7 @@ import OrdersPage from './pages/OrdersPage'
 import OrderDetailPage from './pages/OrderDetailPage'
 import BillingPage from './pages/BillingPage'
 import BillingDetailPage from './pages/BillingDetailPage'
+import ReportsPage from './pages/ReportsPage'
 import PublicOrderPage from './pages/PublicOrderPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -46,6 +47,7 @@ const router = createBrowserRouter([
       { path: 'orders/:id',  element: <OrderDetailPage /> },
       { path: 'billing',     element: <BillingPage /> },
       { path: 'billing/:id', element: <BillingDetailPage /> },
+      { path: 'reports',     element: <ReportsPage /> },
     ],
   },
   {

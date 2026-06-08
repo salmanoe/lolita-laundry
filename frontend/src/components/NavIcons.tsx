@@ -69,6 +69,16 @@ export function InvoiceIcon({ className }: IconProps) {
   )
 }
 
+/** Laporan — bar chart (reports / analytics). */
+export function ChartIcon({ className }: IconProps) {
+  return (
+    <svg className={className} {...base}>
+      <path d="M4 4v15a1 1 0 0 0 1 1h15" />
+      <path d="M8 16v-3M12 16v-6M16 16v-9" />
+    </svg>
+  )
+}
+
 /** Master Data — sliders (adjust reference data). */
 export function SlidersIcon({ className }: IconProps) {
   return (
