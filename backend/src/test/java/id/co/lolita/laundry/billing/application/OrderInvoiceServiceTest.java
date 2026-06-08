@@ -4,6 +4,8 @@ import id.co.lolita.laundry.billing.domain.OrderInvoice;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway.ClientInfo;
 import id.co.lolita.laundry.billing.domain.port.out.BillingStoragePort;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway.CompanyInfo;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway.DeliveredOrder;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway.InvoiceLine;
@@ -44,11 +46,17 @@ class OrderInvoiceServiceTest {
     @Mock
     BillingClientGateway clients;
     @Mock
+    CompanyProfileGateway companyProfile;
+    @Mock
     InvoicePdfPort pdf;
     @Mock
     BillingStoragePort storage;
     @InjectMocks
     OrderInvoiceService service;
+
+    private static final CompanyInfo COMPANY = new CompanyInfo("Lolita Laundry",
+            "Jl. Sukaraja No. 318 Bandung", "082318359775", "Alban Valentino Ramatir",
+            "Bank BCA", "4061792362", "Lolita Laundry");
 
     @Test
     void createForDeliveredOrder_isIdempotent_whenInvoiceExists() {
@@ -69,6 +77,7 @@ class OrderInvoiceServiceTest {
                         new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
         when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
+        when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
         when(invoiceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -82,12 +91,17 @@ class OrderInvoiceServiceTest {
         assertThat(saved.getOrderId()).isEqualTo(99L);
         assertThat(saved.getSubtotal()).isEqualByComparingTo("8000.00");
         assertThat(saved.getPdfUrl()).isEqualTo("invoices/INV-AYI-20260601-001.pdf");
+        // Company letterhead frozen onto the invoice at creation.
+        assertThat(saved.getCompanyName()).isEqualTo("Lolita Laundry");
+        assertThat(saved.getCompanyAddress()).isEqualTo("Jl. Sukaraja No. 318 Bandung");
+        assertThat(saved.getCompanyPhone()).isEqualTo("082318359775");
     }
 
     @Test
     void ensurePdfForOrder_returnsExisting_whenPdfAlreadyPresent() {
         var invoice = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
-                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"));
+                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"),
+                "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");
         invoice.attachPdf("invoices/INV-AYI-20260601-001.pdf");
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(invoice));
 
@@ -101,7 +115,8 @@ class OrderInvoiceServiceTest {
     @Test
     void ensurePdfForOrder_rendersStoresAndSaves_whenPdfMissing() {
         var invoice = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
-                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"));   // no PDF (e.g. backfilled)
+                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"),
+                "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");   // no PDF (e.g. backfilled)
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(invoice));
         var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
@@ -134,7 +149,8 @@ class OrderInvoiceServiceTest {
     @Test
     void regenerateAllPdfs_rerendersEveryInvoice() {
         var invoice = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
-                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"));
+                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"),
+                "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");
         invoice.attachPdf("invoices/INV-AYI-20260601-001.pdf");   // already has a PDF — still re-rendered
         when(invoiceRepository.findAll()).thenReturn(List.of(invoice));
         var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,

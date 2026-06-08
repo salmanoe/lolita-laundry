@@ -16,10 +16,19 @@ public interface InvoicePdfPort {
     }
 
     /**
+     * The company letterhead printed at the top of every document (and, for the monthly billing,
+     * the bank-transfer block). These are snapshot values supplied by the caller — frozen for an
+     * issued billing / a created order invoice, live for a DRAFT billing.
+     */
+    record CompanyHeader(String companyName, String address, String phone, String bankBeneficiary,
+                         String bankName, String bankAccount, String bankHolder) {
+    }
+
+    /**
      * Everything the Order Invoice template needs.
      */
-    record OrderInvoiceDocument(String invoiceNumber, String invoiceDate, String clientName, String clientCode,
-                                String orderNumber, String orderDate, String orderTypeLabel,
+    record OrderInvoiceDocument(CompanyHeader company, String invoiceNumber, String invoiceDate, String clientName,
+                                String clientCode, String orderNumber, String orderDate, String orderTypeLabel,
                                 String departmentName, List<InvoiceItemRow> items, String total) {
     }
 
@@ -28,8 +37,8 @@ public interface InvoicePdfPort {
      * single "Laundry Periode" line with the grand total (the per-order breakdown lives in the
      * app UI, not on the invoice), plus the Terbilang amount-in-words.
      */
-    record MonthlyBillingDocument(String number, String clientName, String departmentName, String invoiceDate,
-                                  String paymentTerms, String periodDescription, String total,
+    record MonthlyBillingDocument(CompanyHeader company, String number, String clientName, String departmentName,
+                                  String invoiceDate, String paymentTerms, String periodDescription, String total,
                                   String amountInWords) {
     }
 

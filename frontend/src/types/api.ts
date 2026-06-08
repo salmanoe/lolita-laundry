@@ -20,6 +20,17 @@ export interface Page<T> {
   totalPages: number
 }
 
+/** Company letterhead + bank details printed on PDFs — singleton, edited in Master Data (OWNER only). */
+export interface CompanyProfile {
+  companyName:     string
+  address:         string
+  phone:           string
+  bankBeneficiary: string
+  bankName:        string
+  bankAccount:     string
+  bankHolder:      string
+}
+
 /** Reference data (item units, client types) — managed via Master Data. */
 export interface Lookup {
   id:          number

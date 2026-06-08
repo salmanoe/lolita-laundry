@@ -2,6 +2,7 @@ package id.co.lolita.laundry.billing;
 
 import id.co.lolita.laundry.client.domain.port.in.ClientDirectoryQuery;
 import id.co.lolita.laundry.order.domain.port.in.DeliveredOrderQuery;
+import id.co.lolita.laundry.settings.domain.port.in.CompanyProfileQuery;
 import id.co.lolita.laundry.storage.domain.port.out.StoragePort;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.test.ApplicationModuleTest;
@@ -21,6 +22,7 @@ class BillingModuleTest {
 
     @MockitoBean DeliveredOrderQuery deliveredOrderQuery;
     @MockitoBean ClientDirectoryQuery clientDirectoryQuery;
+    @MockitoBean CompanyProfileQuery companyProfileQuery;
     @MockitoBean StoragePort storagePort;
     @MockitoBean JwtDecoder jwtDecoder;
 

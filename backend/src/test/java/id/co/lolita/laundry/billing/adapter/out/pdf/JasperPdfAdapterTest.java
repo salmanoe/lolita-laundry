@@ -1,5 +1,6 @@
 package id.co.lolita.laundry.billing.adapter.out.pdf;
 
+import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.CompanyHeader;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.InvoiceItemRow;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.MonthlyBillingDocument;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.OrderInvoiceDocument;
@@ -18,6 +19,10 @@ class JasperPdfAdapterTest {
 
     private final JasperPdfAdapter adapter = new JasperPdfAdapter();
 
+    private static final CompanyHeader COMPANY = new CompanyHeader("Lolita Laundry",
+            "Jl. Sukaraja No. 318 Bandung", "082318359775", "Alban Valentino Ramatir",
+            "Bank BCA", "4061792362", "Lolita Laundry");
+
     private static boolean isPdf(byte[] bytes) {
         return bytes.length > 4 && new String(bytes, 0, 5, StandardCharsets.US_ASCII).equals("%PDF-");
     }
@@ -25,6 +30,7 @@ class JasperPdfAdapterTest {
     @Test
     void rendersOrderInvoicePdf() {
         var doc = new OrderInvoiceDocument(
+                COMPANY,
                 "INV-PBS-20260601-001", "1 Juni 2026", "Pasar Baru Square", "PBS",
                 "PBS-20260601-001", "1 Juni 2026", "Treatment", "Room Linen",
                 List.of(
@@ -41,6 +47,7 @@ class JasperPdfAdapterTest {
     @Test
     void rendersMonthlyBillingPdf() {
         var doc = new MonthlyBillingDocument(
+                COMPANY,
                 "BILL-PBS-202606-RL", "Pasar Baru Square", "Room Linen", "01/06/26", "2 Days",
                 "Laundry Periode 1 June - 30 June 2026", "Rp 350.000",
                 "Tiga Ratus Lima Puluh Ribu Rupiah");

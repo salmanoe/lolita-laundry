@@ -35,6 +35,16 @@ public class MonthlyBilling {
     private final String notes;
     private final Instant createdAt;
     private final List<MonthlyBillingLine> lines = new ArrayList<>();
+    // Company letterhead + bank details, frozen when the billing is ISSUED so a later
+    // company-profile change never rewrites an issued/paid document. Null while DRAFT — a DRAFT
+    // renders from the live profile instead (see MonthlyBillingService).
+    private String companyName;
+    private String companyAddress;
+    private String companyPhone;
+    private String bankBeneficiary;
+    private String bankName;
+    private String bankAccount;
+    private String bankHolder;
 
     public MonthlyBilling(Long id, String billingNumber, Long clientId, Long departmentId, String departmentName,
                           int periodYear, int periodMonth, LocalDate invoiceDate, BigDecimal total,
@@ -87,7 +97,9 @@ public class MonthlyBilling {
                 new ArrayList<>());
     }
 
-    /** Advances the status by exactly one step ({@code DRAFT → ISSUED → PAID}). */
+    /**
+     * Advances the status by exactly one step ({@code DRAFT → ISSUED → PAID}).
+     */
     public void advanceStatus(BillingStatus target) {
         if (!status.canTransitionTo(target)) {
             throw new IllegalArgumentException(
@@ -96,9 +108,27 @@ public class MonthlyBilling {
         this.status = target;
     }
 
-    /** Records the storage key of the rendered PDF. */
+    /**
+     * Records the storage key of the rendered PDF.
+     */
     public void attachPdf(String storageKey) {
         this.pdfUrl = storageKey;
+    }
+
+    /**
+     * Freezes the company letterhead + bank details onto this billing. Called when the billing is
+     * ISSUED (so the issued/paid document is self-contained and immune to later profile changes),
+     * and when reconstituting a persisted billing.
+     */
+    public void captureCompany(String companyName, String companyAddress, String companyPhone,
+                               String bankBeneficiary, String bankName, String bankAccount, String bankHolder) {
+        this.companyName = companyName;
+        this.companyAddress = companyAddress;
+        this.companyPhone = companyPhone;
+        this.bankBeneficiary = bankBeneficiary;
+        this.bankName = bankName;
+        this.bankAccount = bankAccount;
+        this.bankHolder = bankHolder;
     }
 
     /**
@@ -111,13 +141,17 @@ public class MonthlyBilling {
         recomputeTotal();
     }
 
-    /** Removes the order's line (e.g. it was cancelled) and recomputes the total. */
+    /**
+     * Removes the order's line (e.g. it was canceled) and recomputes the total.
+     */
     public void removeLine(Long orderId) {
         lines.removeIf(l -> l.orderId().equals(orderId));
         recomputeTotal();
     }
 
-    /** True when no orders remain on the billing (the row should be deleted). */
+    /**
+     * True when no orders remain on the billing (the row should be deleted).
+     */
     public boolean isEmpty() {
         return lines.isEmpty();
     }
