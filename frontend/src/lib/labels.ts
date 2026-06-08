@@ -1,7 +1,20 @@
 // Static label for the one enum that stays fixed in code (BillingMode drives billing logic).
 // Item units, item categories and client types are dynamic reference data — resolve their
 // labels from the lookup lists (see lib/lookups.ts), not from here.
-import type { BillingMode, BillingStatus, OrderStatus } from '../types/api'
+import type { BillingMode, BillingStatus, OrderStatus, Role } from '../types/api'
+
+// User roles — Indonesian label + badge colour. OWNER/STAFF run the admin app, DRIVER the delivery app.
+export const roleLabel: Record<Role, string> = {
+  OWNER: 'Pemilik',
+  STAFF: 'Staf',
+  DRIVER: 'Pengantar',
+}
+
+export const roleBadge: Record<Role, string> = {
+  OWNER: 'bg-violet-100 text-violet-700',
+  STAFF: 'bg-blue-100 text-blue-700',
+  DRIVER: 'bg-amber-100 text-amber-700',
+}
 
 export const billingModeLabel: Record<BillingMode, string> = {
   COMBINED: 'Gabungan',

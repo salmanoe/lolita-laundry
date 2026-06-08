@@ -15,6 +15,7 @@ import OrderDetailPage from './pages/OrderDetailPage'
 import BillingPage from './pages/BillingPage'
 import BillingDetailPage from './pages/BillingDetailPage'
 import ReportsPage from './pages/ReportsPage'
+import UsersPage from './pages/UsersPage'
 import PublicOrderPage from './pages/PublicOrderPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -48,6 +49,7 @@ const router = createBrowserRouter([
       { path: 'billing',     element: <BillingPage /> },
       { path: 'billing/:id', element: <BillingDetailPage /> },
       { path: 'reports',     element: <ReportsPage /> },
+      { path: 'users',       element: <UsersPage /> },
     ],
   },
   {

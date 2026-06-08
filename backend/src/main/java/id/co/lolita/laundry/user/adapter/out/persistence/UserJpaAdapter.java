@@ -3,8 +3,10 @@ package id.co.lolita.laundry.user.adapter.out.persistence;
 import id.co.lolita.laundry.user.domain.User;
 import id.co.lolita.laundry.user.domain.port.out.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 @Component
@@ -21,6 +23,18 @@ class UserJpaAdapter implements UserRepository {
     @Override
     public Optional<User> findById(Long id) {
         return jpaRepository.findById(id).map(UserJpaEntity::toDomain);
+    }
+
+    @Override
+    public List<User> findAll() {
+        return jpaRepository.findAll(Sort.by(Sort.Direction.ASC, "fullName")).stream()
+                .map(UserJpaEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    public boolean existsByAuth0Sub(String auth0Sub) {
+        return jpaRepository.existsByAuth0Sub(auth0Sub);
     }
 
     @Override
