@@ -1,5 +1,6 @@
 package id.co.lolita.laundry.shared.adapter.in.web;
 
+import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.core.PropertyReferenceException;
@@ -35,6 +36,18 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Application-level conflict with a friendly, caller-facing message — a concurrency
+     * collision serialized by a unique constraint (e.g. a duplicate delivery confirm) that
+     * we translate ourselves rather than leaking the raw DB error.
+     */
+    @ExceptionHandler(ConflictException.class)
+    ProblemDetail handleConflict(ConflictException ex) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        return problem;
+    }
+
+    /**
      * Database constraint breaches that slip past application checks — a bad foreign key
      * (e.g. a price for a non-existent item) or a unique violation (duplicate client code,
      * duplicate price for the same item/date). Returns 409 rather than a raw 500.
@@ -64,7 +77,7 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.toMap(
                         FieldError::getField,
                         fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "invalid",
-                        (a, b) -> a  // keep first error per field
+                        (a, _) -> a  // keep first error per field
                 ));
 
         var problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
