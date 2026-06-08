@@ -87,4 +87,31 @@ class OrderJpaRepositoryTest {
         assertThat(repository.search(null, null, null, today.minusDays(1), pageable).getTotalElements())
                 .isZero();
     }
+
+    @Test
+    void findBillableInPeriod_excludesCancelledAndOutOfRange_oldestFirst() {
+        var today = LocalDate.now();
+        repository.save(order("AYI-1", 1L, today, OrderStatus.RECEIVED));
+        repository.save(order("PBS-1", 2L, today.minusDays(1), OrderStatus.DONE));
+        repository.save(order("AYI-2", 1L, today, OrderStatus.CANCELLED));      // excluded
+        repository.save(order("AYI-3", 1L, today.minusDays(5), OrderStatus.RECEIVED)); // out of range
+
+        var result = repository.findBillableInPeriod(today.minusDays(2), today);
+
+        assertThat(result).extracting(OrderJpaEntity::getOrderNumber)
+                .containsExactly("PBS-1", "AYI-1");
+    }
+
+    @Test
+    void countByOrderDate_andCountByStatusIn() {
+        var today = LocalDate.now();
+        repository.save(order("AYI-1", 1L, today, OrderStatus.RECEIVED));
+        repository.save(order("AYI-2", 1L, today, OrderStatus.PROCESSING));
+        repository.save(order("AYI-3", 1L, today.minusDays(1), OrderStatus.DONE));
+
+        assertThat(repository.countByOrderDate(today)).isEqualTo(2);
+        assertThat(repository.countByStatusIn(java.util.List.of(OrderStatus.RECEIVED, OrderStatus.PROCESSING)))
+                .isEqualTo(2);
+        assertThat(repository.countByStatusIn(java.util.List.of(OrderStatus.DONE))).isEqualTo(1);
+    }
 }

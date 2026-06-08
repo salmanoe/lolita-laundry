@@ -231,3 +231,65 @@ export interface OrderInvoice {
   subtotal:      number
   pdfUrl:        string
 }
+
+// ── Dashboard & Reports (Phase 4) ──────────────────────────────────────────────
+// All money is "billable orders by order date" (every non-cancelled order, multiplier-inclusive).
+
+/** Dashboard summary cards — mirrors DashboardSummaryResponse. */
+export interface DashboardSummary {
+  ordersToday:      number
+  inProgress:       number
+  readyForDelivery: number
+  revenueThisMonth: number
+}
+
+/** Per-client billable totals for a report period — mirrors ClientLineResponse. */
+export interface ReportClientLine {
+  clientId:   number
+  clientName: string
+  clientCode: string | null
+  orderCount: number
+  total:      number
+}
+
+/** Daily summary — mirrors DailyReportResponse. */
+export interface DailyReport {
+  date:       string   // ISO date
+  clients:    ReportClientLine[]
+  grandTotal: number
+}
+
+/** Monthly per-client report — mirrors MonthlyReportResponse. */
+export interface MonthlyReport {
+  year:       number
+  month:      number   // 1-12
+  clients:    ReportClientLine[]
+  grandTotal: number
+}
+
+/** Per-hotel report over a date range — mirrors HotelReportResponse. */
+export interface HotelReport {
+  clientId:   number
+  clientName: string
+  clientCode: string | null
+  from:       string   // ISO date
+  to:         string   // ISO date
+  orders:     HotelReportOrderLine[]
+  items:      HotelReportItemLine[]
+  grandTotal: number
+}
+
+export interface HotelReportOrderLine {
+  orderId:     number
+  orderNumber: string
+  orderDate:   string   // ISO date
+  status:      OrderStatus
+  total:       number
+}
+
+export interface HotelReportItemLine {
+  itemName: string
+  unit:     string | null
+  quantity: number
+  total:    number
+}
