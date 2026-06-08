@@ -243,7 +243,7 @@ export interface OrderInvoice {
 }
 
 // ── Dashboard & Reports (Phase 4) ──────────────────────────────────────────────
-// All money is "billable orders by order date" (every non-cancelled order, multiplier-inclusive).
+// All money is "billable orders by order date" (every non-canceled order, multiplier-inclusive).
 
 /** Dashboard summary cards — mirrors DashboardSummaryResponse. */
 export interface DashboardSummary {
@@ -251,6 +251,33 @@ export interface DashboardSummary {
   inProgress:       number
   readyForDelivery: number
   revenueThisMonth: number
+}
+
+/** Owner analytics dashboard payload — mirrors DashboardAnalyticsResponse. `month` is "YYYY-MM". */
+export interface DashboardAnalytics {
+  from:           string
+  to:             string
+  totalRevenue:   number
+  totalOrders:    number
+  avgOrderValue:  number
+  bestMonth:      { month: string; revenue: number } | null
+  hotels:         AnalyticsHotelTotal[]   // ranked by revenue desc; drives legend + color order
+  months:         AnalyticsMonthPoint[]   // chronological
+}
+
+export interface AnalyticsHotelTotal {
+  clientId:   number
+  name:       string
+  code:       string | null
+  orderCount: number
+  revenue:    number
+}
+
+export interface AnalyticsMonthPoint {
+  month:    string   // "YYYY-MM"
+  revenue:  number
+  partial:  boolean
+  perHotel: { clientId: number; revenue: number }[]
 }
 
 /** Per-client billable totals for a report period — mirrors ClientLineResponse. */
