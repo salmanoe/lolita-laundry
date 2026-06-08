@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -139,7 +140,8 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var snapshot = deliveredOrders.findBillableOrder(orderId);    // empty if canceled / gone
         var existing = billingRepository.findAllByOrderLine(orderId); // its current billing(s), if any
 
-        // Canceled / removed → drop from every billing it is on (only while still DRAFT).
+        // Canceled / removed → drop from every billing it is on (only while still DRAFT). A line on
+        // a frozen (ISSUED/PAID) bill cannot be retracted — the issued document is final.
         if (snapshot.isEmpty()) {
             for (var b : existing) {
                 if (b.getStatus() == BillingStatus.DRAFT) {
@@ -153,35 +155,55 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var client = clients.findById(o.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + o.clientId()));
         var portions = portionsOf(o, client.perDepartment());
-        var desiredDeptIds = portions.stream().map(Portion::departmentId).toList();
+        var naturalYm = YearMonth.of(o.orderDate().getYear(), o.orderDate().getMonthValue());
 
-        // Remove the order from any DRAFT billing whose department it no longer touches
-        // (e.g. an edit moved all of a department's items out of the order).
-        for (var b : existing) {
-            if (b.getStatus() == BillingStatus.DRAFT
-                    && desiredDeptIds.stream().noneMatch(d -> Objects.equals(d, b.getDepartmentId()))) {
-                dropOrderFrom(b, orderId);
-            }
-        }
+        // Reconcile every department the order currently touches *plus* every department it is
+        // already billed on — so a department an edit emptied out of the order is reconciled too
+        // . (Its line dropped from a DRAFT, or credited forward off a frozen bill.)
+        var deptIds = new LinkedHashSet<Long>();
+        portions.forEach(p -> deptIds.add(p.departmentId()));
+        existing.forEach(b -> deptIds.add(b.getDepartmentId()));
 
-        // Upsert each department portion into its billing.
-        for (var portion : portions) {
-            var line = MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), portion.subtotal());
-            var billingForDept = existing.stream()
-                    .filter(b -> Objects.equals(b.getDepartmentId(), portion.departmentId()))
+        for (var deptId : deptIds) {
+            // The order's portion for this department, if it still touches it (absent = emptied out).
+            var portion = portions.stream()
+                    .filter(p -> Objects.equals(p.departmentId(), deptId))
+                    .findFirst();
+            var desired = portion.map(Portion::subtotal).orElse(BigDecimal.ZERO);
+            var deptName = portion.map(Portion::departmentName).orElse(null);
+
+            // The bill in the order's natural period for this department, if the order is on one.
+            var naturalBill = existing.stream()
+                    .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                    .filter(b -> b.getPeriodYear() == naturalYm.getYear()
+                            && b.getPeriodMonth() == naturalYm.getMonthValue())
                     .findFirst();
 
-            if (billingForDept.isPresent()) {
-                var b = billingForDept.get();
-                if (b.getStatus() == BillingStatus.DRAFT) {   // frozen billings are left untouched
-                    b.upsertLine(line);
+            if (naturalBill.isPresent() && naturalBill.get().getStatus() != BillingStatus.DRAFT) {
+                // KI-3 (option b): the order's natural-period bill is frozen (ISSUED/PAID), so its
+                // line is immutable. Reconcile by rolling the DELTA against the frozen amount into
+                // the next open DRAFT — the edit's money is preserved, not silently lost.
+                if (deptName == null) {
+                    deptName = naturalBill.get().getDepartmentName();
+                }
+                var delta = desired.subtract(lineSubtotal(naturalBill.get(), orderId));
+                reconcileAdjustment(client, deptId, deptName, o, existing, naturalYm, delta);
+            } else if (naturalBill.isPresent()) {
+                // Natural-period DRAFT → upsert the full current amount, or drop the line if an edit
+                // moved all of this department's items out of the order.
+                var b = naturalBill.get();
+                if (desired.signum() == 0) {
+                    dropOrderFrom(b, orderId);
+                } else {
+                    b.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), desired));
                     renderAndAttach(b);
                     billingRepository.save(b);
                 }
-            } else {
-                var target = resolveTargetDraft(client, portion.departmentId(), portion.departmentName(),
-                        o.orderDate());
-                target.upsertLine(line);
+            } else if (desired.signum() != 0) {
+                // Not yet billed on this department → resolve the open DRAFT (rolling forward if the
+                // natural month is already closed) and upsert the full amount.
+                var target = resolveTargetDraft(client, deptId, deptName, o.orderDate());
+                target.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), desired));
                 renderAndAttach(target);
                 billingRepository.save(target);
             }
@@ -189,6 +211,40 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     }
 
     // ── helpers ──
+
+    /**
+     * Rolls a billing delta for an order whose natural-period bill is frozen into the next open
+     * DRAFT period (KI-3 option b). A zero delta clears any stale adjustment line; a non-zero delta
+     * is upserted as a single line keyed by the order, so repeated edits always reflect the
+     * cumulative difference from the frozen amount rather than double-counting.
+     */
+    private void reconcileAdjustment(ClientInfo client, Long deptId, String deptName, DeliveredOrder o,
+                                     List<MonthlyBilling> existing, YearMonth naturalYm, BigDecimal delta) {
+        if (delta.signum() == 0) {
+            existing.stream()
+                    .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                    .filter(b -> b.getStatus() == BillingStatus.DRAFT)
+                    .filter(b -> !(b.getPeriodYear() == naturalYm.getYear()
+                            && b.getPeriodMonth() == naturalYm.getMonthValue()))
+                    .findFirst()
+                    .ifPresent(b -> dropOrderFrom(b, o.orderId()));
+            return;
+        }
+        var target = resolveTargetDraft(client, deptId, deptName, o.orderDate());
+        target.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), delta));
+        renderAndAttach(target);
+        billingRepository.save(target);
+    }
+
+    /**
+     * The subtotal currently billed for an order on a given billing (zero if it has no such line).
+     */
+    private static BigDecimal lineSubtotal(MonthlyBilling billing, Long orderId) {
+        return billing.getLines().stream()
+                .filter(l -> l.orderId().equals(orderId))
+                .map(MonthlyBillingLine::subtotal)
+                .findFirst().orElse(BigDecimal.ZERO);
+    }
 
     /**
      * A single department's share of one order (departmentId null for COMBINED clients).

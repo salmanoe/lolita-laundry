@@ -275,6 +275,61 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
+    void sync_editOnIssuedBill_rollsDeltaIntoNextOpenDraft() {
+        // KI-3 (option b): an order is on an ISSUED June bill at 5000; staff edit it to 8000. The
+        // frozen bill is untouched and the +3000 delta is rolled into the next open DRAFT (July).
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal("8000.00"), new BigDecimal("8000.00"), null, null);
+        var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"), List.of(line));
+        var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(edited));
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(issuedJune));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 6)).thenReturn(Optional.of(issuedJune));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 7)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(77L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());   // only the new July draft is written
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-AYI-202607");
+        assertThat(saved.getStatus()).isEqualTo(BillingStatus.DRAFT);
+        assertThat(saved.getTotal()).isEqualByComparingTo("3000.00");   // the rolled-forward delta
+        assertThat(saved.getLines()).singleElement().satisfies(l -> {
+            assertThat(l.orderId()).isEqualTo(77L);
+            assertThat(l.subtotal()).isEqualByComparingTo("3000.00");
+        });
+        verify(billingRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void sync_unchangedOrderOnIssuedBill_isNoOp() {
+        // The order is on an ISSUED bill and its amount has not changed → zero delta, nothing rolls
+        // forward, the frozen bill stays frozen. No writes at all.
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);
+        var unchanged = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of(line));
+        var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(unchanged));
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(issuedJune));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+
+        service.sync(77L);
+
+        verify(billingRepository, never()).save(any());
+        verify(billingRepository, never()).deleteById(any());
+        verifyNoInteractions(pdf, storage);
+    }
+
+    @Test
     void sync_removesCancelledOrderAndDeletesEmptyDraft() {
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.empty());   // cancelled / gone
         var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
