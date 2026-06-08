@@ -3,7 +3,7 @@
 // labels from the lookup lists (see lib/lookups.ts), not from here.
 import type { BillingMode, BillingStatus, OrderStatus, Role } from '../types/api'
 
-// User roles — Indonesian label + badge colour. OWNER/STAFF run the admin app, DRIVER the delivery app.
+// User roles — Indonesian label + badge color. OWNER/STAFF run the admin app, DRIVER the delivery app.
 export const roleLabel: Record<Role, string> = {
   OWNER: 'Pemilik',
   STAFF: 'Staf',
@@ -21,7 +21,7 @@ export const billingModeLabel: Record<BillingMode, string> = {
   PER_DEPARTMENT: 'Per Departemen',
 }
 
-// Order status — Indonesian label + badge colour. Flow: RECEIVED → PROCESSING → DONE → DELIVERED.
+// Order status — Indonesian label + badge color. Flow: RECEIVED → PROCESSING → DONE → DELIVERED.
 export const orderStatusLabel: Record<OrderStatus, string> = {
   RECEIVED: 'Diterima',
   PROCESSING: 'Diproses',
@@ -44,7 +44,7 @@ export const nextAdvanceStatus: Partial<Record<OrderStatus, OrderStatus>> = {
   PROCESSING: 'DONE',
 }
 
-// Billing status — Indonesian label + badge colour. Flow: DRAFT → ISSUED → PAID.
+// Billing status — Indonesian label + badge color. Flow: DRAFT → ISSUED → PAID.
 export const billingStatusLabel: Record<BillingStatus, string> = {
   DRAFT: 'Draf',
   ISSUED: 'Terbit',
@@ -68,3 +68,13 @@ export const monthName = [
   '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ]
+
+/**
+ * Renders a "YYYY-MM" key as an Indonesian month label. `short` → "Mei 26" (3-letter month +
+ * 2-digit year, for chart axes); otherwise "Mei 2026".
+ */
+export function monthLabelFromYm(ym: string, short = false): string {
+  const [y, m] = ym.split('-').map(Number)
+  const name = monthName[m] ?? ym
+  return short ? `${name.slice(0, 3)} ${String(y).slice(2)}` : `${name} ${y}`
+}

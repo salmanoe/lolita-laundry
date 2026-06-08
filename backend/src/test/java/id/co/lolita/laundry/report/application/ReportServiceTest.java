@@ -1,6 +1,7 @@
 package id.co.lolita.laundry.report.application;
 
 import id.co.lolita.laundry.report.domain.DailyReport;
+import id.co.lolita.laundry.report.domain.DashboardAnalytics;
 import id.co.lolita.laundry.report.domain.DashboardSummary;
 import id.co.lolita.laundry.report.domain.HotelReport;
 import id.co.lolita.laundry.report.domain.MonthlyReport;
@@ -19,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 
@@ -91,6 +93,65 @@ class ReportServiceTest {
         DailyReport r = service.daily(date);
 
         assertThat(r.clients().getFirst().clientName()).isEqualTo("#99");
+    }
+
+    @Test
+    void analyticsAggregatesRangeRanksHotelsAndFlagsPartialMonth() {
+        // 3 months ending at the current month; the last month is partial.
+        YearMonth m0 = YearMonth.now().minusMonths(2);
+        YearMonth m1 = YearMonth.now().minusMonths(1);
+        YearMonth m2 = YearMonth.now();
+        LocalDate from = m0.atDay(1);
+        LocalDate to = LocalDate.now(); // YTD-style: clamps the current month to today
+
+        when(orders.billableByClient(m0.atDay(1), m0.atEndOfMonth())).thenReturn(List.of(
+                new ClientTotals(1L, 2, new BigDecimal("200000")),
+                new ClientTotals(2L, 1, new BigDecimal("100000"))));
+        when(orders.billableByClient(m1.atDay(1), m1.atEndOfMonth())).thenReturn(List.of(
+                new ClientTotals(1L, 1, new BigDecimal("300000"))));
+        when(orders.billableByClient(m2.atDay(1), to)).thenReturn(List.of(
+                new ClientTotals(2L, 1, new BigDecimal("500000"))));
+        when(orders.billableRevenue(from, to)).thenReturn(new BigDecimal("1100000"));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Alpha", "ALP")));
+        when(clients.findById(2L)).thenReturn(Optional.of(new ClientInfo(2L, "Beta", "BET")));
+
+        DashboardAnalytics a = service.analytics(from, to);
+
+        assertThat(a.totalRevenue()).isEqualByComparingTo("1100000");
+        assertThat(a.totalOrders()).isEqualTo(5);
+        assertThat(a.avgOrderValue()).isEqualByComparingTo("220000"); // 1,100,000 / 5
+
+        // Beta = 100k+500k = 600k (ranks first); Alpha = 200k+300k = 500k.
+        assertThat(a.hotels()).extracting(DashboardAnalytics.HotelTotal::clientId).containsExactly(2L, 1L);
+        assertThat(a.hotels().getFirst().revenue()).isEqualByComparingTo("600000");
+        assertThat(a.hotels().getFirst().orderCount()).isEqualTo(2);
+
+        assertThat(a.bestMonth().month()).isEqualTo(m2);
+        assertThat(a.bestMonth().revenue()).isEqualByComparingTo("500000");
+
+        assertThat(a.months()).hasSize(3);
+        assertThat(a.months().getFirst().month()).isEqualTo(m0);
+        assertThat(a.months().get(0).partial()).isFalse();
+        assertThat(a.months().get(0).revenue()).isEqualByComparingTo("300000"); // 200k + 100k
+        assertThat(a.months().get(2).partial()).isTrue();
+    }
+
+    @Test
+    void analyticsEmptyRangeHasNoBestMonthAndZeroAvg() {
+        YearMonth past = YearMonth.now().minusMonths(1);
+        LocalDate from = past.atDay(1);
+        LocalDate to = past.atEndOfMonth();
+        when(orders.billableByClient(any(), any())).thenReturn(List.of());
+        when(orders.billableRevenue(from, to)).thenReturn(BigDecimal.ZERO);
+
+        DashboardAnalytics a = service.analytics(from, to);
+
+        assertThat(a.totalOrders()).isZero();
+        assertThat(a.avgOrderValue()).isEqualByComparingTo("0");
+        assertThat(a.bestMonth()).isNull();
+        assertThat(a.hotels()).isEmpty();
+        assertThat(a.months()).hasSize(1);
+        assertThat(a.months().getFirst().revenue()).isEqualByComparingTo("0");
     }
 
     @Test
