@@ -63,8 +63,8 @@ dependencies {
     // ── JasperReports — Order Invoice + Monthly Billing PDFs (Phase 3) ──
     // 7.x is the Jakarta-based line (matches Spring Boot 4 / Jakarta EE 11). Split into
     // feature modules: -pdf adds the OpenPDF export backend, -jdt the Eclipse compiler used
-    // to compile report expressions at fill time. Templates live in resources/reports/*.jrxml
-    // and are compiled at runtime (cached) by JasperPdfAdapter.
+    // to compile report expressions at fill time. Layouts are built programmatically via the
+    // JasperDesign API in JasperPdfAdapter (not .jrxml), compiled once and cached.
     implementation("net.sf.jasperreports:jasperreports:7.0.1")
     implementation("net.sf.jasperreports:jasperreports-pdf:7.0.1")
     implementation("net.sf.jasperreports:jasperreports-jdt:7.0.1")
