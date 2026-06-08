@@ -11,6 +11,16 @@ export interface Me {
   role:     Role
 }
 
+/** A Lolita user row in the owner's user-management screen — mirrors UserResponse. */
+export interface User {
+  id:        number
+  auth0Sub:  string
+  fullName:  string
+  role:      Role
+  active:    boolean
+  createdAt: string
+}
+
 /** Paged list response — mirrors the backend shared.Page record. `page` is 0-based. */
 export interface Page<T> {
   content: T[]

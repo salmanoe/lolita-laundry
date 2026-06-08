@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Navigate, NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
-import { BasketIcon, ChartIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, TowelsIcon } from './NavIcons'
+import { BasketIcon, ChartIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, TowelsIcon, UsersIcon } from './NavIcons'
 
+// `ownerOnly` items are hidden from STAFF (the backend also enforces OWNER on /api/users).
 const navItems = [
   { to: '/',        label: 'Dasbor', Icon: HomeIcon },
   { to: '/clients', label: 'Klien',  Icon: HotelIcon },
@@ -12,6 +13,7 @@ const navItems = [
   { to: '/reports', label: 'Laporan', Icon: ChartIcon },
   { to: '/items',   label: 'Item',   Icon: TowelsIcon },
   { to: '/master-data', label: 'Master Data', Icon: SlidersIcon },
+  { to: '/users',   label: 'Pengguna', Icon: UsersIcon, ownerOnly: true },
 ]
 
 function initials(name?: string) {
@@ -41,6 +43,9 @@ export default function Layout() {
   if (meQ.data?.role === 'DRIVER') {
     return <Navigate to="/deliveries" replace />
   }
+
+  const isOwner = meQ.data?.role === 'OWNER'
+  const visibleNav = navItems.filter((item) => !item.ownerOnly || isOwner)
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -96,7 +101,7 @@ export default function Layout() {
         <nav className="flex-1 px-3 py-4">
           <p className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-blue-200/60">Menu</p>
           <div className="space-y-1">
-            {navItems.map(({ to, label, Icon }) => (
+            {visibleNav.map(({ to, label, Icon }) => (
               <NavLink
                 key={to}
                 to={to}
