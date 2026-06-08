@@ -4,9 +4,11 @@ import id.co.lolita.laundry.billing.domain.OrderInvoice;
 import id.co.lolita.laundry.billing.domain.port.in.CreateOrderInvoiceUseCase;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway;
 import id.co.lolita.laundry.billing.domain.port.out.BillingStoragePort;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway.DeliveredOrder;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
+import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.CompanyHeader;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.InvoiceItemRow;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.OrderInvoiceDocument;
 import id.co.lolita.laundry.billing.domain.port.out.OrderInvoiceRepository;
@@ -36,6 +38,7 @@ class OrderInvoiceService implements CreateOrderInvoiceUseCase {
     private final OrderInvoiceRepository invoiceRepository;
     private final DeliveredOrderGateway deliveredOrders;
     private final BillingClientGateway clients;
+    private final CompanyProfileGateway companyProfile;
     private final InvoicePdfPort pdf;
     private final BillingStoragePort storage;
 
@@ -52,9 +55,12 @@ class OrderInvoiceService implements CreateOrderInvoiceUseCase {
                 .orElseThrow(() -> new IllegalStateException(
                         "Client not found for invoicing order " + orderId));
 
+        // Freeze the company letterhead as it stands now — an order invoice is an immutable
+        // reference document.
+        var company = companyProfile.current();
         var invoiceNumber = INVOICE_NUMBER_PREFIX + order.orderNumber();
         var invoice = OrderInvoice.create(invoiceNumber, orderId, order.clientId(),
-                LocalDate.now(), order.total());
+                LocalDate.now(), order.total(), company.companyName(), company.address(), company.phone());
 
         renderStoreAndAttachPdf(invoice, order, client.name(), client.clientCode());
 
@@ -132,7 +138,13 @@ class OrderInvoiceService implements CreateOrderInvoiceUseCase {
         boolean treatment = order.pricingMultiplier() != null
                 && order.pricingMultiplier().compareTo(BigDecimal.ONE) > 0;
 
+        // Letterhead is the invoice's own snapshot, frozen at creation — no bank block on the
+        // order invoice.
+        var company = new CompanyHeader(invoice.getCompanyName(), invoice.getCompanyAddress(),
+                invoice.getCompanyPhone(), null, null, null, null);
+
         return new OrderInvoiceDocument(
+                company,
                 invoice.getInvoiceNumber(),
                 BillingFormats.longDate(invoice.getInvoiceDate()),
                 clientName,

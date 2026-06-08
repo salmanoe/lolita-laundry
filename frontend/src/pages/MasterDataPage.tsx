@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import CompanyProfileSection from '../components/CompanyProfileSection'
 import LookupFormModal from '../components/LookupFormModal'
 import { lookupKindLabel, useLookupList, type LookupKind } from '../lib/lookups'
 import type { Lookup } from '../types/api'
@@ -13,8 +14,9 @@ export default function MasterDataPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold text-gray-800">Master Data</h1>
-        <p className="text-sm text-gray-500">Kelola satuan item dan tipe klien.</p>
+        <p className="text-sm text-gray-500">Kelola profil perusahaan, satuan item, dan tipe klien.</p>
       </div>
+      <CompanyProfileSection />
       {KINDS.map((kind) => (
         <LookupSection key={kind} kind={kind} />
       ))}

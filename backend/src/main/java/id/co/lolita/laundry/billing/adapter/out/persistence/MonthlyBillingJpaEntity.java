@@ -62,6 +62,29 @@ class MonthlyBillingJpaEntity {
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
+
+    // Company snapshot, frozen at ISSUE (null while DRAFT — rendered from the live profile).
+    @Column(name = "company_name", length = 100)
+    private String companyName;
+
+    @Column(name = "company_address", length = 200)
+    private String companyAddress;
+
+    @Column(name = "company_phone", length = 30)
+    private String companyPhone;
+
+    @Column(name = "bank_beneficiary", length = 100)
+    private String bankBeneficiary;
+
+    @Column(name = "bank_name", length = 50)
+    private String bankName;
+
+    @Column(name = "bank_account", length = 50)
+    private String bankAccount;
+
+    @Column(name = "bank_holder", length = 100)
+    private String bankHolder;
+
     @OneToMany(mappedBy = "billing", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<MonthlyBillingLineJpaEntity> lines = new ArrayList<>();
 
@@ -80,6 +103,7 @@ class MonthlyBillingJpaEntity {
         e.pdfUrl = b.getPdfUrl();
         e.notes = b.getNotes();
         e.createdAt = b.getCreatedAt();
+        e.copyCompanyFrom(b);
         for (var line : b.getLines()) {
             var le = MonthlyBillingLineJpaEntity.fromDomain(line);
             le.setBilling(e);
@@ -89,13 +113,25 @@ class MonthlyBillingJpaEntity {
     }
 
     /**
-     * Copies the mutable fields (status, PDF, total) and reconciles the line set in place.
+     * Copies the mutable fields (status, PDF, total, company snapshot) and reconciles the line
+     * set in place. The company snapshot is filled in when the billing is ISSUED.
      */
     void applyMutable(MonthlyBilling b) {
         this.status = b.getStatus();
         this.pdfUrl = b.getPdfUrl();
         this.total = b.getTotal();
+        copyCompanyFrom(b);
         syncLines(b);
+    }
+
+    private void copyCompanyFrom(MonthlyBilling b) {
+        this.companyName = b.getCompanyName();
+        this.companyAddress = b.getCompanyAddress();
+        this.companyPhone = b.getCompanyPhone();
+        this.bankBeneficiary = b.getBankBeneficiary();
+        this.bankName = b.getBankName();
+        this.bankAccount = b.getBankAccount();
+        this.bankHolder = b.getBankHolder();
     }
 
     /**
@@ -124,7 +160,10 @@ class MonthlyBillingJpaEntity {
     MonthlyBilling toDomain() {
         List<MonthlyBillingLine> domainLines = lines.stream()
                 .map(MonthlyBillingLineJpaEntity::toDomain).toList();
-        return new MonthlyBilling(id, billingNumber, clientId, departmentId, departmentName, periodYear, periodMonth,
-                invoiceDate, total, status, pdfUrl, notes, createdAt, domainLines);
+        var billing = new MonthlyBilling(id, billingNumber, clientId, departmentId, departmentName, periodYear,
+                periodMonth, invoiceDate, total, status, pdfUrl, notes, createdAt, domainLines);
+        billing.captureCompany(companyName, companyAddress, companyPhone, bankBeneficiary, bankName, bankAccount,
+                bankHolder);
+        return billing;
     }
 }

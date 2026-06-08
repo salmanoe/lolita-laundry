@@ -9,9 +9,12 @@ import id.co.lolita.laundry.billing.domain.port.in.UpdateBillingStatusUseCase;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway.ClientInfo;
 import id.co.lolita.laundry.billing.domain.port.out.BillingStoragePort;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway.CompanyInfo;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway.DeliveredOrder;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
+import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.CompanyHeader;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.MonthlyBillingDocument;
 import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
@@ -48,6 +51,7 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     private final MonthlyBillingRepository billingRepository;
     private final DeliveredOrderGateway deliveredOrders;
     private final BillingClientGateway clients;
+    private final CompanyProfileGateway companyProfile;
     private final InvoicePdfPort pdf;
     private final BillingStoragePort storage;
 
@@ -92,7 +96,19 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     public MonthlyBilling updateStatus(UpdateStatusCommand command) {
         var billing = billingRepository.findById(command.billingId())
                 .orElseThrow(() -> new NotFoundException("Billing not found: " + command.billingId()));
+        boolean issuing = billing.getStatus() == BillingStatus.DRAFT && command.target() == BillingStatus.ISSUED;
         billing.advanceStatus(command.target());
+        if (issuing) {
+            // Freeze the company letterhead + bank details onto the billing at issue time, then
+            // re-render so the issued PDF is self-contained and immune to later profile changes.
+            var c = companyProfile.current();
+            billing.captureCompany(c.companyName(), c.address(), c.phone(), c.bankBeneficiary(),
+                    c.bankName(), c.bankAccount(), c.bankHolder());
+            var client = clients.findById(billing.getClientId())
+                    .orElseThrow(() -> new NotFoundException("Client not found: " + billing.getClientId()));
+            var pdfBytes = pdf.renderMonthlyBilling(toDocument(billing, client));
+            billing.attachPdf(storage.store("billings/" + billing.getBillingNumber() + ".pdf", pdfBytes));
+        }
         return billingRepository.save(billing);
     }
 
@@ -276,8 +292,27 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
                 : base + "-" + BillingFormats.departmentAbbrev(departmentName, departmentId);
     }
 
+    /**
+     * The company header for a billing: the live profile while DRAFT (it follows profile edits),
+     * the frozen snapshot once ISSUED/PAID. Falls back to live if an issued snapshot is somehow
+     * missing, so the letterhead is never blank.
+     */
+    private CompanyHeader companyHeaderFor(MonthlyBilling billing) {
+        if (billing.getStatus() == BillingStatus.DRAFT || billing.getCompanyName() == null) {
+            return toHeader(companyProfile.current());
+        }
+        return new CompanyHeader(billing.getCompanyName(), billing.getCompanyAddress(), billing.getCompanyPhone(),
+                billing.getBankBeneficiary(), billing.getBankName(), billing.getBankAccount(), billing.getBankHolder());
+    }
+
+    private static CompanyHeader toHeader(CompanyInfo c) {
+        return new CompanyHeader(c.companyName(), c.address(), c.phone(), c.bankBeneficiary(),
+                c.bankName(), c.bankAccount(), c.bankHolder());
+    }
+
     private MonthlyBillingDocument toDocument(MonthlyBilling billing, ClientInfo client) {
         return new MonthlyBillingDocument(
+                companyHeaderFor(billing),
                 billing.getBillingNumber(),
                 client.name(),
                 billing.getDepartmentName() == null ? "" : billing.getDepartmentName(),

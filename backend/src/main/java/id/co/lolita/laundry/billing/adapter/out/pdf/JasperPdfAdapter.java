@@ -1,36 +1,24 @@
 package id.co.lolita.laundry.billing.adapter.out.pdf;
 
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
-import net.sf.jasperreports.engine.JRException;
-import net.sf.jasperreports.engine.JasperCompileManager;
-import net.sf.jasperreports.engine.JasperFillManager;
-import net.sf.jasperreports.engine.JasperPrint;
-import net.sf.jasperreports.engine.JasperReport;
+import lombok.extern.slf4j.Slf4j;
+import net.sf.jasperreports.engine.*;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
-import net.sf.jasperreports.engine.design.JRDesignBand;
-import net.sf.jasperreports.engine.design.JRDesignExpression;
-import net.sf.jasperreports.engine.design.JRDesignField;
-import net.sf.jasperreports.engine.design.JRDesignLine;
-import net.sf.jasperreports.engine.design.JRDesignParameter;
-import net.sf.jasperreports.engine.design.JRDesignSection;
-import net.sf.jasperreports.engine.design.JRDesignStaticText;
-import net.sf.jasperreports.engine.design.JRDesignTextField;
-import net.sf.jasperreports.engine.design.JasperDesign;
-import net.sf.jasperreports.engine.type.HorizontalTextAlignEnum;
-import net.sf.jasperreports.engine.type.ModeEnum;
+import net.sf.jasperreports.engine.design.*;
+import net.sf.jasperreports.engine.type.*;
 import net.sf.jasperreports.export.SimpleExporterInput;
 import net.sf.jasperreports.export.SimpleOutputStreamExporterOutput;
 import net.sf.jasperreports.pdf.JRPdfExporter;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
-import java.awt.Color;
+import javax.imageio.ImageIO;
+import java.awt.*;
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Renders billing PDFs with JasperReports. The report layouts are built programmatically via
@@ -41,6 +29,7 @@ import java.util.Map;
  * references with no locale or arithmetic logic.
  */
 @Component
+@Slf4j
 class JasperPdfAdapter implements InvoicePdfPort {
 
     private static final int PAGE_WIDTH = 595;          // A4 portrait at 72dpi
@@ -49,17 +38,29 @@ class JasperPdfAdapter implements InvoicePdfPort {
     private static final Color HEADER_BG = new Color(0xEE, 0xEE, 0xEE);
     private static final Color RULE = new Color(0xDD, 0xDD, 0xDD);
 
-    // ── Fixed company letterhead / payment details (from the real Lolita invoice template) ──
-    private static final String COMPANY_NAME = "Lolita Laundry";
-    private static final String COMPANY_ADDRESS = "Jl. Sukaraja No. 318 Bandung";
-    private static final String COMPANY_PHONE = "082318359775";
-    private static final String BANK_BENEFICIARY = "Alban Valentino Ramatir";
-    private static final String BANK_NAME = "Bank BCA";
-    private static final String BANK_ACCOUNT = "4061792362";
-    private static final String BANK_HOLDER = "Lolita Laundry";
+    // ── Brand assets bundled on the classpath (loaded once; rarely change) ──
+    // logo.png — full-colour letterhead mark; watermark.png — pre-faded, behind the content.
+    private static final Image LOGO = loadImage("/pdf/logo.png");
+    private static final Image WATERMARK = loadImage("/pdf/watermark.png");
+
+    // Company letterhead / bank details are now per-document parameters (supplied by the caller
+    // from the editable company profile, frozen onto issued documents), no longer hardcoded here.
 
     private volatile JasperReport orderInvoiceReport;
     private volatile JasperReport monthlyBillingReport;
+
+    private static Image loadImage(String classpathPath) {
+        try (InputStream in = JasperPdfAdapter.class.getResourceAsStream(classpathPath)) {
+            if (in == null) {
+                log.warn("PDF asset not found on classpath: {} — rendering without it", classpathPath);
+                return null;
+            }
+            return ImageIO.read(in);
+        } catch (IOException e) {
+            log.warn("Failed to load PDF asset {}: {}", classpathPath, e.getMessage());
+            return null;
+        }
+    }
 
     // ── InvoicePdfPort ──
 
@@ -82,6 +83,7 @@ class JasperPdfAdapter implements InvoicePdfPort {
 
     private static @NonNull Map<String, Object> getStringObjectMap(OrderInvoiceDocument doc) {
         Map<String, Object> params = new HashMap<>();
+        putCompanyLetterhead(params, doc.company());
         params.put("invoiceNumber", doc.invoiceNumber());
         params.put("invoiceDate", doc.invoiceDate());
         params.put("clientLine", clientLine(doc.clientName(), doc.clientCode()));
@@ -93,9 +95,25 @@ class JasperPdfAdapter implements InvoicePdfPort {
         return params;
     }
 
+    /**
+     * Company name/address/phone + brand images — the shared letterhead on both documents.
+     */
+    private static void putCompanyLetterhead(Map<String, Object> params, CompanyHeader company) {
+        params.put("companyName", company.companyName());
+        params.put("companyAddress", company.address());
+        params.put("companyPhone", company.phone());
+        params.put("logo", LOGO);
+        params.put("watermark", WATERMARK);
+    }
+
     @Override
     public byte[] renderMonthlyBilling(MonthlyBillingDocument doc) {
         Map<String, Object> params = new HashMap<>();
+        putCompanyLetterhead(params, doc.company());
+        params.put("bankBeneficiary", doc.company().bankBeneficiary());
+        params.put("bankName", doc.company().bankName());
+        params.put("bankAccount", doc.company().bankAccount());
+        params.put("bankHolder", doc.company().bankHolder());
         params.put("number", doc.number());
         params.put("clientName", doc.clientName());
         params.put("departmentName", doc.departmentName());
@@ -159,15 +177,18 @@ class JasperPdfAdapter implements InvoicePdfPort {
     private JasperDesign buildOrderInvoiceDesign() {
         try {
             JasperDesign d = baseDesign("order_invoice");
-            addParameters(d, "invoiceNumber", "invoiceDate", "clientLine", "orderNumber",
-                    "orderDate", "orderTypeLabel", "departmentName", "total");
+            addImageParams(d);
+            addParameters(d, "companyName", "companyAddress", "companyPhone", "invoiceNumber", "invoiceDate",
+                    "clientLine", "orderNumber", "orderDate", "orderTypeLabel", "departmentName", "total");
             addFields(d, "name", "unit", "quantity", "unitPrice", "subtotal");
+            d.setBackground(watermarkBand(d));
 
             JRDesignBand title = band(172);
             // Shared letterhead (matches the monthly billing invoice) — itemized layout below.
-            title.addElement(text(COMPANY_NAME, 0, 0, 320, 22, 15f, true, HorizontalTextAlignEnum.LEFT));
-            title.addElement(text(COMPANY_ADDRESS, 0, 22, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
-            title.addElement(text(COMPANY_PHONE, 0, 36, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            title.addElement(logo(d));
+            title.addElement(paramCell("companyName", 225, 0, 320, 22, 15f, true, HorizontalTextAlignEnum.RIGHT));
+            title.addElement(paramCell("companyAddress", 225, 22, 320, 14, 9f, false, HorizontalTextAlignEnum.RIGHT));
+            title.addElement(paramCell("companyPhone", 225, 36, 320, 14, 9f, false, HorizontalTextAlignEnum.RIGHT));
             title.addElement(text("INVOICE", 0, 58, CONTENT_WIDTH, 24, 18f, true, HorizontalTextAlignEnum.CENTER));
             title.addElement(rule(0, 88, CONTENT_WIDTH));
             labelValue(title, "No. Invoice", "invoiceNumber", 0, 96, true);
@@ -217,15 +238,19 @@ class JasperPdfAdapter implements InvoicePdfPort {
     private JasperDesign buildMonthlyBillingDesign() {
         try {
             JasperDesign d = baseDesign("monthly_billing");
-            addParameters(d, "number", "clientName", "departmentName", "invoiceDate",
+            addImageParams(d);
+            addParameters(d, "companyName", "companyAddress", "companyPhone", "bankBeneficiary", "bankName",
+                    "bankAccount", "bankHolder", "number", "clientName", "departmentName", "invoiceDate",
                     "paymentTerms", "periodDescription", "total", "amountInWords");
+            d.setBackground(watermarkBand(d));
 
             JRDesignBand t = band(390);
 
             // Letterhead
-            t.addElement(text(COMPANY_NAME, 0, 0, 320, 22, 15f, true, HorizontalTextAlignEnum.LEFT));
-            t.addElement(text(COMPANY_ADDRESS, 0, 22, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
-            t.addElement(text(COMPANY_PHONE, 0, 36, 320, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(logo(d));
+            t.addElement(paramCell("companyName", 225, 0, 320, 22, 15f, true, HorizontalTextAlignEnum.RIGHT));
+            t.addElement(paramCell("companyAddress", 225, 22, 320, 14, 9f, false, HorizontalTextAlignEnum.RIGHT));
+            t.addElement(paramCell("companyPhone", 225, 36, 320, 14, 9f, false, HorizontalTextAlignEnum.RIGHT));
             t.addElement(text("INVOICE", 0, 58, CONTENT_WIDTH, 24, 18f, true, HorizontalTextAlignEnum.CENTER));
             t.addElement(rule(0, 88, CONTENT_WIDTH));
 
@@ -257,10 +282,10 @@ class JasperPdfAdapter implements InvoicePdfPort {
 
             // Bank transfer details
             t.addElement(text("Please Transfer To", 0, 282, 300, 14, 9f, true, HorizontalTextAlignEnum.LEFT));
-            t.addElement(text(BANK_BENEFICIARY, 0, 298, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
-            t.addElement(text(BANK_NAME, 0, 312, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
-            t.addElement(text("No. Rekening : " + BANK_ACCOUNT, 0, 326, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
-            t.addElement(text("Nama Pemilik Rekening : " + BANK_HOLDER, 0, 340, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(paramCell("bankBeneficiary", 0, 298, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(paramCell("bankName", 0, 312, 300, 14, 9f, false, HorizontalTextAlignEnum.LEFT));
+            t.addElement(concatCell("No. Rekening : ", "bankAccount", 0, 326, 300, 14));
+            t.addElement(concatCell("Nama Pemilik Rekening : ", "bankHolder", 0, 340, 300, 14));
 
             d.setTitle(t);
             return d;
@@ -309,6 +334,57 @@ class JasperPdfAdapter implements InvoicePdfPort {
             f.setValueClass(String.class);
             d.addField(f);
         }
+    }
+
+    /**
+     * Image parameters carrying the {@code java.awt.Image} brand assets.
+     */
+    private static void addImageParams(JasperDesign d) throws JRException {
+        for (String name : new String[]{"logo", "watermark"}) {
+            var p = new JRDesignParameter();
+            p.setName(name);
+            p.setValueClass(Image.class);
+            d.addParameter(p);
+        }
+    }
+
+    /**
+     * The brand logo, sized to the top-left of the letterhead (preserves aspect, left-aligned).
+     */
+    private static JRDesignImage logo(JasperDesign d) {
+        return image(d, "logo", 0, 0, 150, 56, HorizontalImageAlignEnum.LEFT);
+    }
+
+    /**
+     * A page-background band holding the faint, centred watermark behind the content.
+     */
+    private static JRDesignBand watermarkBand(JasperDesign d) {
+        var b = band(760);
+        b.addElement(image(d, "watermark", (CONTENT_WIDTH - 320) / 2, 250, 320, 232,
+                HorizontalImageAlignEnum.CENTER));
+        return b;
+    }
+
+    private static JRDesignImage image(JasperDesign d, String paramName, int x, int y, int w, int h,
+                                       HorizontalImageAlignEnum align) {
+        var img = new JRDesignImage(d);
+        img.setExpression(chunk(true, paramName));
+        img.setScaleImage(ScaleImageEnum.RETAIN_SHAPE);
+        img.setHorizontalImageAlign(align);
+        img.setOnErrorType(OnErrorTypeEnum.BLANK);   // a missing asset leaves a blank, never fails the render
+        place(img, x, y, w, h);
+        return img;
+    }
+
+    /**
+     * A text field whose value is a static label concatenated with a parameter (e.g. "No. Rekening : 123").
+     */
+    private static JRDesignTextField concatCell(String literalPrefix, String paramName, int x, int y, int w, int h) {
+        var e = new JRDesignExpression();
+        // A text chunk is raw expression code, so the literal must be a quoted Java string + concat.
+        e.addTextChunk("\"" + literalPrefix + "\" + ");
+        e.addParameterChunk(paramName);
+        return valueCell(e, x, y, w, h, 9f, false, HorizontalTextAlignEnum.LEFT);
     }
 
     private static void detailBand(JasperDesign d, JRDesignBand band) {

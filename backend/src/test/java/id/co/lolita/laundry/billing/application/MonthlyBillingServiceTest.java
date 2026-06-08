@@ -8,9 +8,12 @@ import id.co.lolita.laundry.billing.domain.port.in.UpdateBillingStatusUseCase.Up
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway.ClientInfo;
 import id.co.lolita.laundry.billing.domain.port.out.BillingStoragePort;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway.CompanyInfo;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway.DeliveredOrder;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
+import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.MonthlyBillingDocument;
 import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -49,6 +53,8 @@ class MonthlyBillingServiceTest {
     @Mock
     BillingClientGateway clients;
     @Mock
+    CompanyProfileGateway companyProfile;
+    @Mock
     InvoicePdfPort pdf;
     @Mock
     BillingStoragePort storage;
@@ -57,6 +63,10 @@ class MonthlyBillingServiceTest {
 
     private static final long COMBINED_CLIENT = 1L;
     private static final long PBS = 7L;
+
+    private static final CompanyInfo COMPANY = new CompanyInfo("Lolita Laundry",
+            "Jl. Sukaraja No. 318 Bandung", "082318359775", "Alban Valentino Ramatir",
+            "Bank BCA", "4061792362", "Lolita Laundry");
 
     private static ClientInfo combined() {
         return new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false);
@@ -74,6 +84,8 @@ class MonthlyBillingServiceTest {
     }
 
     private void stubPdfAndStorageAndSave() {
+        // DRAFT billings render from the live company profile.
+        when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(any(), any())).thenReturn("billings/key.pdf");
         when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -178,23 +190,51 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
-    void updateStatus_advancesOneStep() {
+    void updateStatus_issuing_freezesCompanySnapshot_andRerenders() {
         var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
         when(billingRepository.findById(50L)).thenReturn(Optional.of(draft));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(eq("billings/BILL-AYI-202606.pdf"), any())).thenReturn("billings/BILL-AYI-202606.pdf");
         when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.updateStatus(new UpdateStatusCommand(50L, BillingStatus.ISSUED));
 
         assertThat(result.getStatus()).isEqualTo(BillingStatus.ISSUED);
+        // The letterhead + bank block are frozen onto the billing at issue time.
+        assertThat(result.getCompanyName()).isEqualTo("Lolita Laundry");
+        assertThat(result.getBankAccount()).isEqualTo("4061792362");
+        assertThat(result.getPdfUrl()).isEqualTo("billings/BILL-AYI-202606.pdf");
+        verify(pdf).renderMonthlyBilling(any());
     }
 
     @Test
-    void regenerateAllPdfs_rerendersEveryBilling_evenIssued() {
-        // A PAID billing with an old PDF — bulk refresh re-renders it (layout-only) without changing status.
+    void updateStatus_paying_doesNotRecaptureCompany() {
+        // An ISSUED→PAID transition keeps the snapshot frozen at issue and does not re-render.
+        var issued = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("100.00"), BillingStatus.ISSUED, "billings/k.pdf", null,
+                Instant.now(), List.of());
+        when(billingRepository.findById(50L)).thenReturn(Optional.of(issued));
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.updateStatus(new UpdateStatusCommand(50L, BillingStatus.PAID));
+
+        assertThat(result.getStatus()).isEqualTo(BillingStatus.PAID);
+        verify(pdf, never()).renderMonthlyBilling(any());
+        verifyNoInteractions(companyProfile);
+    }
+
+    @Test
+    void regenerateAllPdfs_rerendersIssuedFromFrozenSnapshot_notLiveProfile() {
+        // A PAID billing with an old PDF and a frozen company snapshot. Bulk refresh re-renders it
+        // (layout-only) from that snapshot — never the live profile, so history is not rewritten.
         var paid = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.PAID, "billings/old.pdf", null,
                 Instant.now(), List.of());
+        paid.captureCompany("Lolita Laundry", "OLD ADDRESS", "0000", "Old Beneficiary",
+                "Bank BCA", "9999999999", "Lolita Laundry");
         when(billingRepository.findAll(null, null, null)).thenReturn(List.of(paid));
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
@@ -204,8 +244,12 @@ class MonthlyBillingServiceTest {
         int count = service.regenerateAllPdfs();
 
         assertThat(count).isEqualTo(1);
-        verify(pdf).renderMonthlyBilling(any());
+        var doc = ArgumentCaptor.forClass(MonthlyBillingDocument.class);
+        verify(pdf).renderMonthlyBilling(doc.capture());
+        assertThat(doc.getValue().company().address()).isEqualTo("OLD ADDRESS");
+        assertThat(doc.getValue().company().bankAccount()).isEqualTo("9999999999");
         verify(billingRepository).save(paid);
+        verifyNoInteractions(companyProfile);   // frozen — live profile never consulted
     }
 
     @Test
