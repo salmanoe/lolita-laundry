@@ -16,23 +16,27 @@ import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.MonthlyBillingDocument;
 import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -58,8 +62,23 @@ class MonthlyBillingServiceTest {
     InvoicePdfPort pdf;
     @Mock
     BillingStoragePort storage;
+    @Mock
+    Executor billingEventExecutor;
+    @Mock
+    ObjectProvider<MonthlyBillingService> self;
     @InjectMocks
     MonthlyBillingService service;
+
+    @BeforeEach
+    void wireExecutorAndSelf() {
+        // generate() dispatches onto the billing-event executor and re-enters via the self proxy;
+        // outside Spring, run the task inline on the test thread and resolve the proxy to service.
+        lenient().when(self.getObject()).thenReturn(service);
+        lenient().doAnswer(inv -> {
+            inv.getArgument(0, Runnable.class).run();
+            return null;
+        }).when(billingEventExecutor).execute(any());
+    }
 
     private static final long COMBINED_CLIENT = 1L;
     private static final long PBS = 7L;
@@ -168,6 +187,22 @@ class MonthlyBillingServiceTest {
                 .hasMessageContaining("cannot be regenerated");
         verify(billingRepository, never()).deleteById(any());
         verify(billingRepository, never()).save(any());
+    }
+
+    @Test
+    void generate_runsOnTheBillingEventExecutor() {
+        // KI-4: the manual rebuild must be serialized with the async sync by running on the same
+        // single-thread executor, not the request thread.
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
+                .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
+        when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
+                .thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.generate(new GenerateCommand(COMBINED_CLIENT, 2026, 6));
+
+        verify(billingEventExecutor).execute(any());   // dispatched, not run inline on the caller
     }
 
     @Test

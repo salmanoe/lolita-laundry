@@ -20,7 +20,9 @@ import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -32,6 +34,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 /**
  * Generates Monthly Billings and drives their {@code DRAFT → ISSUED → PAID} lifecycle.
@@ -55,9 +61,27 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     private final CompanyProfileGateway companyProfile;
     private final InvoicePdfPort pdf;
     private final BillingStoragePort storage;
+    // The single-thread executor that serializes the async order→billing sync. Manual rebuilds run
+    // on it too so a rebuild and an auto-sync for the same client/period can never overlap (KI-4).
+    private final Executor billingEventExecutor;
+    // Self-reference so the rebuild runs through the @Transactional proxy on the executor thread
+    // (a direct this.* call would bypass it). Lazy → no init cycle.
+    private final ObjectProvider<MonthlyBillingService> self;
 
+    /**
+     * Manual rebuild of a period's DRAFT. Dispatched onto the single-thread {@code
+     * billingEventExecutor} and awaited, so it is serialized with the async order→billing sync
+     * (KI-4): a sync event firing mid-rebuild can no longer resurrect a removed line or collide.
+     * Non-transactional itself — the actual work opens its transaction on the executor thread.
+     */
     @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<MonthlyBilling> generate(GenerateCommand command) {
+        return runOnBillingThread(() -> self.getObject().generateInternal(command));
+    }
+
+    @Transactional
+    public List<MonthlyBilling> generateInternal(GenerateCommand command) {
         var client = clients.findById(command.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + command.clientId()));
 
@@ -211,6 +235,34 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     }
 
     // ── helpers ──
+
+    /**
+     * Runs {@code work} on the single-thread {@code billingEventExecutor} and blocks for its result,
+     * so a manual rebuild is serialized with the async sync (KI-4). Runtime exceptions (the empty-period /
+     * regeneration-rejected / not-found guards) propagate to the caller unchanged.
+     */
+    private <T> T runOnBillingThread(Supplier<T> work) {
+        var future = new CompletableFuture<T>();
+        billingEventExecutor.execute(() -> {
+            try {
+                future.complete(work.get());
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while generating billing", e);
+        } catch (ExecutionException e) {
+            switch (e.getCause()) {
+                case RuntimeException re -> throw re;
+                case Error err -> throw err;
+                case null, default -> throw new IllegalStateException("Billing generation failed", e.getCause());
+            }
+        }
+    }
 
     /**
      * Rolls a billing delta for an order whose natural-period bill is frozen into the next open
