@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api/client'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { apiFetch, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { downloadAuthed } from '../lib/download'
 import { monthName, orderStatusBadge, orderStatusLabel } from '../lib/labels'
 import type { Client, DailyReport, HotelReport, MonthlyReport, Page } from '../types/api'
 
@@ -62,6 +63,31 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputClass =
   'rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
+
+/** Downloads a report as .xlsx via the authenticated export endpoint. */
+function ExcelButton({ path, filename, disabled }: { path: string; filename: string; disabled?: boolean }) {
+  const { getAccessTokenSilently } = useAuth()
+  const m = useMutation({
+    mutationFn: async () => downloadAuthed(path, await getAccessTokenSilently(), filename),
+  })
+  return (
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        onClick={() => m.mutate()}
+        disabled={disabled || m.isPending}
+        className="inline-flex items-center gap-1.5 rounded-md border border-green-600 px-3 py-1.5 text-sm font-medium text-green-700 transition-colors hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {m.isPending ? 'Mengunduh…' : '⬇ Unduh Excel'}
+      </button>
+      {m.isError && (
+        <span className="text-xs text-red-600">
+          {m.error instanceof ApiError ? m.error.detail : 'Gagal mengunduh.'}
+        </span>
+      )}
+    </div>
+  )
+}
 
 function Loading() {
   return <div className="rounded-lg border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">Memuat…</div>
@@ -135,6 +161,11 @@ function DailyTab() {
         <Field label="Tanggal">
           <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} className={inputClass} />
         </Field>
+        <ExcelButton
+          path={`/api/reports/daily/export?date=${date}`}
+          filename={`Laporan-Harian-${date}.xlsx`}
+          disabled={isLoading || !data}
+        />
       </div>
       {isLoading ? <Loading /> : error ? <ErrorBox /> : data && <ClientTotalsTable rows={data.clients} grandTotal={data.grandTotal} />}
     </div>
@@ -178,6 +209,11 @@ function MonthlyTab() {
             ))}
           </select>
         </Field>
+        <ExcelButton
+          path={`/api/reports/monthly/export?year=${year}&month=${month}`}
+          filename={`Laporan-Bulanan-${year}-${String(month).padStart(2, '0')}.xlsx`}
+          disabled={isLoading || !data}
+        />
       </div>
       {isLoading ? <Loading /> : error ? <ErrorBox /> : data && <ClientTotalsTable rows={data.clients} grandTotal={data.grandTotal} />}
     </div>
@@ -229,6 +265,11 @@ function HotelTab() {
         <Field label="Sampai">
           <input type="date" value={to} max={today()} onChange={(e) => setTo(e.target.value)} className={inputClass} />
         </Field>
+        <ExcelButton
+          path={`/api/reports/hotel/${clientId}/export?from=${from}&to=${to}`}
+          filename={`Laporan-${clientId}-${from}_${to}.xlsx`}
+          disabled={!enabled || isLoading || !data || data.orders.length === 0}
+        />
       </div>
 
       {!enabled ? (

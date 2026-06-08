@@ -27,6 +27,8 @@ class CorsConfig {
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
+        // Let the browser read the download filename on Excel exports (cross-origin in prod).
+        config.setExposedHeaders(List.of("Content-Disposition"));
         config.setAllowCredentials(true);
 
         var source = new UrlBasedCorsConfigurationSource();
