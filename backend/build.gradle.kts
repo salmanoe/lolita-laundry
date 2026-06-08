@@ -69,6 +69,11 @@ dependencies {
     implementation("net.sf.jasperreports:jasperreports-pdf:7.0.1")
     implementation("net.sf.jasperreports:jasperreports-jdt:7.0.1")
 
+    // ── Apache POI — Excel (.xlsx) export of the reports (Phase 5) ──
+    // poi-ooxml pulls in poi (core) + the OOXML stack (xmlbeans, commons-compress). Standalone —
+    // no servlet/Jakarta coupling, so any 5.x works under Spring Boot 4.
+    implementation("org.apache.poi:poi-ooxml:5.4.1")
+
     // ── AWS SDK v2 — S3-compatible (MinIO in dev, Cloudflare R2 in prod) ──
     implementation("software.amazon.awssdk:s3")
 

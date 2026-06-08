@@ -5,9 +5,11 @@ import id.co.lolita.laundry.report.domain.DashboardAnalytics;
 import id.co.lolita.laundry.report.domain.DashboardSummary;
 import id.co.lolita.laundry.report.domain.HotelReport;
 import id.co.lolita.laundry.report.domain.MonthlyReport;
+import id.co.lolita.laundry.report.domain.port.in.ExportReportsUseCase.ExcelFile;
 import id.co.lolita.laundry.report.domain.port.out.ClientLookupGateway;
 import id.co.lolita.laundry.report.domain.port.out.ClientLookupGateway.ClientInfo;
 import id.co.lolita.laundry.report.domain.port.out.OrderReportGateway;
+import id.co.lolita.laundry.report.domain.port.out.ReportExcelPort;
 import id.co.lolita.laundry.report.domain.port.out.OrderReportGateway.ClientTotals;
 import id.co.lolita.laundry.report.domain.port.out.OrderReportGateway.ItemTotals;
 import id.co.lolita.laundry.report.domain.port.out.OrderReportGateway.OrderRow;
@@ -35,6 +37,8 @@ class ReportServiceTest {
     OrderReportGateway orders;
     @Mock
     ClientLookupGateway clients;
+    @Mock
+    ReportExcelPort excel;
     @InjectMocks
     ReportService service;
 
@@ -152,6 +156,43 @@ class ReportServiceTest {
         assertThat(a.hotels()).isEmpty();
         assertThat(a.months()).hasSize(1);
         assertThat(a.months().getFirst().revenue()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void dailyExcelBuildsFilenameAndDelegatesToPort() {
+        LocalDate date = LocalDate.of(2026, 6, 8);
+        when(orders.billableByClient(date, date)).thenReturn(List.of());
+        when(excel.dailyWorkbook(any())).thenReturn(new byte[]{1, 2, 3});
+
+        ExcelFile f = service.dailyExcel(date);
+
+        assertThat(f.filename()).isEqualTo("Laporan-Harian-2026-06-08.xlsx");
+        assertThat(f.content()).containsExactly(1, 2, 3);
+    }
+
+    @Test
+    void monthlyExcelFilenameIsZeroPadded() {
+        when(orders.billableByClient(LocalDate.of(2026, 3, 1), LocalDate.of(2026, 3, 31)))
+                .thenReturn(List.of());
+        when(excel.monthlyWorkbook(any())).thenReturn(new byte[]{9});
+
+        ExcelFile f = service.monthlyExcel(2026, 3);
+
+        assertThat(f.filename()).isEqualTo("Laporan-Bulanan-2026-03.xlsx");
+    }
+
+    @Test
+    void hotelExcelFilenameUsesClientCode() {
+        LocalDate from = LocalDate.of(2026, 6, 1);
+        LocalDate to = LocalDate.of(2026, 6, 30);
+        when(clients.findById(7L)).thenReturn(Optional.of(new ClientInfo(7L, "Frances", "FRA")));
+        when(orders.billableOrders(7L, from, to)).thenReturn(List.of());
+        when(orders.billableItems(7L, from, to)).thenReturn(List.of());
+        when(excel.hotelWorkbook(any())).thenReturn(new byte[]{7});
+
+        ExcelFile f = service.hotelExcel(7L, from, to);
+
+        assertThat(f.filename()).isEqualTo("Laporan-FRA-2026-06-01_2026-06-30.xlsx");
     }
 
     @Test

@@ -6,10 +6,12 @@ import id.co.lolita.laundry.report.domain.DashboardAnalytics;
 import id.co.lolita.laundry.report.domain.DashboardSummary;
 import id.co.lolita.laundry.report.domain.HotelReport;
 import id.co.lolita.laundry.report.domain.MonthlyReport;
+import id.co.lolita.laundry.report.domain.port.in.ExportReportsUseCase;
 import id.co.lolita.laundry.report.domain.port.in.GetDashboardUseCase;
 import id.co.lolita.laundry.report.domain.port.in.GetReportsUseCase;
 import id.co.lolita.laundry.report.domain.port.out.ClientLookupGateway;
 import id.co.lolita.laundry.report.domain.port.out.OrderReportGateway;
+import id.co.lolita.laundry.report.domain.port.out.ReportExcelPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -31,10 +33,11 @@ import java.util.Objects;
  */
 @Service
 @RequiredArgsConstructor
-class ReportService implements GetDashboardUseCase, GetReportsUseCase {
+class ReportService implements GetDashboardUseCase, GetReportsUseCase, ExportReportsUseCase {
 
     private final OrderReportGateway orders;
     private final ClientLookupGateway clients;
+    private final ReportExcelPort excel;
 
     @Override
     public DashboardSummary dashboard() {
@@ -133,6 +136,24 @@ class ReportService implements GetDashboardUseCase, GetReportsUseCase {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         return new HotelReport(clientId, name, code, from, to, orderLines, itemLines, grandTotal);
+    }
+
+    @Override
+    public ExcelFile dailyExcel(LocalDate date) {
+        return new ExcelFile("Laporan-Harian-%s.xlsx".formatted(date), excel.dailyWorkbook(daily(date)));
+    }
+
+    @Override
+    public ExcelFile monthlyExcel(int year, int month) {
+        return new ExcelFile("Laporan-Bulanan-%04d-%02d.xlsx".formatted(year, month),
+                excel.monthlyWorkbook(monthly(year, month)));
+    }
+
+    @Override
+    public ExcelFile hotelExcel(Long clientId, LocalDate from, LocalDate to) {
+        HotelReport report = hotel(clientId, from, to);
+        String who = report.clientCode() != null ? report.clientCode() : String.valueOf(clientId);
+        return new ExcelFile("Laporan-%s-%s_%s.xlsx".formatted(who, from, to), excel.hotelWorkbook(report));
     }
 
     /**
