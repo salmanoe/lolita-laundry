@@ -25,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -488,6 +489,11 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         }
     }
 
+    // The only extensions allowed into the storage key. The fallback below is whitelisted against
+    // this set so an untrusted client filename can never inject path separators / odd segments
+    // (KI-10) — anything unrecognized defaults to .jpg.
+    private static final Set<String> ALLOWED_PHOTO_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".webp");
+
     private static String extensionFor(String contentType, String filename) {
         if (contentType != null) {
             if (contentType.equalsIgnoreCase("image/jpeg") || contentType.equalsIgnoreCase("image/jpg")) {
@@ -500,10 +506,15 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
                 return ".webp";
             }
         }
+        // Fall back to the client filename's suffix only when it is a known image extension —
+        // never concatenate an unsanitized client string straight into the storage key (KI-10).
         if (filename != null) {
             int dot = filename.lastIndexOf('.');
             if (dot >= 0 && dot < filename.length() - 1) {
-                return filename.substring(dot).toLowerCase();
+                var ext = filename.substring(dot).toLowerCase();
+                if (ALLOWED_PHOTO_EXTENSIONS.contains(ext)) {
+                    return ext;
+                }
             }
         }
         return ".jpg";

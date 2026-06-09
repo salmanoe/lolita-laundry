@@ -342,6 +342,38 @@ class OrderServiceTest {
     }
 
     @Test
+    void deliver_sanitizesPhotoKeyAgainstACraftedFilename() {
+        // KI-10: a non-image content type makes extensionFor fall back to the client filename's
+        // suffix. A crafted name with path separators must NOT leak into the storage key — the
+        // extension is whitelisted, so anything unrecognized defaults to .jpg.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(photoStorage.store(any(), any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(deliveryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var confirmation = service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2, 3},
+                "application/octet-stream", "evil.php/../../etc/passwd", 5L));
+
+        assertThat(confirmation.getPhotoUrl()).isEqualTo("photos/AYI-20260101-001.jpg");
+        verify(photoStorage).store(eq("photos/AYI-20260101-001.jpg"), any(), eq("application/octet-stream"));
+    }
+
+    @Test
+    void deliver_usesKnownImageExtensionFromFilenameWhenContentTypeMissing() {
+        // A missing content type with a recognized image suffix is honored (whitelisted).
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(photoStorage.store(any(), any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(deliveryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var confirmation = service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2, 3}, null, "proof.PNG", 5L));
+
+        assertThat(confirmation.getPhotoUrl()).isEqualTo("photos/AYI-20260101-001.png");
+    }
+
+    @Test
     void cancel_setsCancelled_recordsHistory_andFiresBillingSync() {
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

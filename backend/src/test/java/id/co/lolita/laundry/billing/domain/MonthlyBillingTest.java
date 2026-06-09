@@ -63,6 +63,29 @@ class MonthlyBillingTest {
     }
 
     @Test
+    void advanceStatus_rejectsIssuingNegativeTotalBilling() {
+        // KI-11: a DRAFT carrying a net credit (negative total, e.g. a roll-forward credit off a
+        // frozen bill) is a valid internal ledger but must not be issued as a client invoice.
+        var credit = draftWith("-3000.00");
+        assertThat(credit.getTotal()).isEqualByComparingTo("-3000.00");
+
+        assertThatThrownBy(() -> credit.advanceStatus(BillingStatus.ISSUED))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("bersaldo negatif");
+        assertThat(credit.getStatus()).isEqualTo(BillingStatus.DRAFT);   // stays a draft
+    }
+
+    @Test
+    void advanceStatus_allowsIssuingOnceCreditNetsNonNegative() {
+        // The same period after offsetting orders join: net total is positive → issuing is allowed.
+        var netted = draftWith("-3000.00", "5000.00");
+        assertThat(netted.getTotal()).isEqualByComparingTo("2000.00");
+
+        netted.advanceStatus(BillingStatus.ISSUED);
+        assertThat(netted.getStatus()).isEqualTo(BillingStatus.ISSUED);
+    }
+
+    @Test
     void attachPdf_recordsStorageKey() {
         var billing = draftWith("1000.00");
         billing.attachPdf("billings/BILL-AYI-202606.pdf");
