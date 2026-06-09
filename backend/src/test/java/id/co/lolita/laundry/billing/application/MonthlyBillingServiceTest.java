@@ -288,6 +288,35 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
+    void ensurePdfForBilling_rendersWhenMissing_andIsNoOpWhenPresent() {
+        // KI-7: a monthly billing whose PDF never attached (storage outage during sync) heals on
+        // first view; one already carrying a PDF is left untouched.
+        var noPdf = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, null, null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(billingRepository.findById(50L)).thenReturn(Optional.of(noPdf));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        stubPdfAndStorageAndSave();
+
+        var healed = service.ensurePdfForBilling(50L);
+
+        assertThat(healed.getPdfUrl()).isEqualTo("billings/key.pdf");
+        verify(pdf).renderMonthlyBilling(any());
+        verify(billingRepository).save(noPdf);
+
+        // Already-rendered billing: no render, no save.
+        var withPdf = new MonthlyBilling(51L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                LocalDate.now(), new BigDecimal("1000.00"), BillingStatus.DRAFT, "billings/existing.pdf", null,
+                Instant.now(), List.of());
+        when(billingRepository.findById(51L)).thenReturn(Optional.of(withPdf));
+
+        var unchanged = service.ensurePdfForBilling(51L);
+
+        assertThat(unchanged.getPdfUrl()).isEqualTo("billings/existing.pdf");
+        verify(billingRepository, never()).save(withPdf);
+    }
+
+    @Test
     void sync_addsBillableOrderToNewDraftPeriod() {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);

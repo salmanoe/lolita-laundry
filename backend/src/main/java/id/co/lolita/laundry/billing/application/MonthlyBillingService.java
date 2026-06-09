@@ -137,6 +137,30 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         return billingRepository.save(billing);
     }
 
+    /**
+     * Self-heals a billing whose PDF never attached (e.g. a storage outage during sync left
+     * {@code pdf_url} null). Runs on the billing-event executor so it cannot race a concurrent
+     * sync of the same billing, and re-enters via the self proxy for a writable transaction.
+     */
+    @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public MonthlyBilling ensurePdfForBilling(Long id) {
+        return runOnBillingThread(() -> self.getObject().ensurePdfForBillingInTx(id));
+    }
+
+    @Transactional
+    public MonthlyBilling ensurePdfForBillingInTx(Long id) {
+        var billing = billingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Billing not found: " + id));
+        if (billing.getPdfUrl() != null && !billing.getPdfUrl().isBlank()) {
+            return billing;   // already rendered
+        }
+        renderAndAttach(billing);
+        var saved = billingRepository.save(billing);
+        log.info("Lazily rendered PDF for monthly billing {}", billing.getBillingNumber());
+        return saved;
+    }
+
     @Override
     public int regenerateAllPdfs() {
         int count = 0;
