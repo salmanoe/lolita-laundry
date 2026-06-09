@@ -247,12 +247,23 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
 
             if (naturalBill.isPresent() && naturalBill.get().getStatus() != BillingStatus.DRAFT) {
                 // KI-3 (option b): the order's natural-period bill is frozen (ISSUED/PAID), so its
-                // line is immutable. Reconcile by rolling the DELTA against the frozen amount into
-                // the next open DRAFT — the edit's money is preserved, not silently lost.
+                // line is immutable. Reconcile by rolling the DELTA into the next open DRAFT — the
+                // edit's money is preserved, not silently lost.
+                //
+                // KI-9: the delta must net against EVERY frozen line for this order in this
+                // department — the natural bill *plus* any intervening period an earlier edit's
+                // adjustment rolled into that has since itself been issued — not just the natural
+                // bill. Subtracting only the natural amount would re-bill a now-frozen prior
+                // adjustment a second time. `existing` already lists every bill holding this order.
                 if (deptName == null) {
                     deptName = naturalBill.get().getDepartmentName();
                 }
-                var delta = desired.subtract(lineSubtotal(naturalBill.get(), orderId));
+                var frozenBilled = existing.stream()
+                        .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                        .filter(b -> b.getStatus() != BillingStatus.DRAFT)
+                        .map(b -> lineSubtotal(b, orderId))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                var delta = desired.subtract(frozenBilled);
                 reconcileAdjustment(client, deptId, deptName, o, existing, naturalYm, delta);
             } else if (naturalBill.isPresent()) {
                 // Natural-period DRAFT → upsert the full current amount, or drop the line if an edit
