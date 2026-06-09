@@ -25,6 +25,12 @@ class OrderJpaEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // Optimistic-lock guard (KI-6): a concurrent stale update throws
+    // OptimisticLockingFailureException instead of silently losing the other write.
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
     @Column(name = "order_number", nullable = false, unique = true, length = 30)
     private String orderNumber;
 

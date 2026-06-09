@@ -9,6 +9,8 @@ import org.springframework.modulith.test.ApplicationModuleTest;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
+import java.util.concurrent.Executor;
+
 /**
  * Bootstraps only the billing module in isolation. Billing reads the order, client and
  * storage modules through their exposed named interfaces; those provider beans live in
@@ -20,11 +22,20 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @ApplicationModuleTest
 class BillingModuleTest {
 
-    @MockitoBean DeliveredOrderQuery deliveredOrderQuery;
-    @MockitoBean ClientDirectoryQuery clientDirectoryQuery;
-    @MockitoBean CompanyProfileQuery companyProfileQuery;
-    @MockitoBean StoragePort storagePort;
-    @MockitoBean JwtDecoder jwtDecoder;
+    @MockitoBean
+    DeliveredOrderQuery deliveredOrderQuery;
+    @MockitoBean
+    ClientDirectoryQuery clientDirectoryQuery;
+    @MockitoBean
+    CompanyProfileQuery companyProfileQuery;
+    @MockitoBean
+    StoragePort storagePort;
+    @MockitoBean
+    JwtDecoder jwtDecoder;
+    // The single-thread billing executor lives in the app-root AsyncConfig, outside this module —
+    // supply it as a mock so MonthlyBillingService (which runs manual rebuilds on it) can wire.
+    @MockitoBean(name = "billingEventExecutor")
+    Executor billingEventExecutor;
 
     @Test
     void billingModuleBootstrapsInIsolation() {

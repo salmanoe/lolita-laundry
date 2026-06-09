@@ -16,23 +16,27 @@ import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort;
 import id.co.lolita.laundry.billing.domain.port.out.InvoicePdfPort.MonthlyBillingDocument;
 import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -58,8 +62,23 @@ class MonthlyBillingServiceTest {
     InvoicePdfPort pdf;
     @Mock
     BillingStoragePort storage;
+    @Mock
+    Executor billingEventExecutor;
+    @Mock
+    ObjectProvider<MonthlyBillingService> self;
     @InjectMocks
     MonthlyBillingService service;
+
+    @BeforeEach
+    void wireExecutorAndSelf() {
+        // generate() dispatches onto the billing-event executor and re-enters via the self proxy;
+        // outside Spring, run the task inline on the test thread and resolve the proxy to service.
+        lenient().when(self.getObject()).thenReturn(service);
+        lenient().doAnswer(inv -> {
+            inv.getArgument(0, Runnable.class).run();
+            return null;
+        }).when(billingEventExecutor).execute(any());
+    }
 
     private static final long COMBINED_CLIENT = 1L;
     private static final long PBS = 7L;
@@ -171,6 +190,22 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
+    void generate_runsOnTheBillingEventExecutor() {
+        // KI-4: the manual rebuild must be serialized with the async sync by running on the same
+        // single-thread executor, not the request thread.
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
+                .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
+        when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
+                .thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.generate(new GenerateCommand(COMBINED_CLIENT, 2026, 6));
+
+        verify(billingEventExecutor).execute(any());   // dispatched, not run inline on the caller
+    }
+
+    @Test
     void generate_rejectsEmptyPeriod() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of());
@@ -253,6 +288,35 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
+    void ensurePdfForBilling_rendersWhenMissing_andIsNoOpWhenPresent() {
+        // KI-7: a monthly billing whose PDF never attached (storage outage during sync) heals on
+        // first view; one already carrying a PDF is left untouched.
+        var noPdf = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, null, null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(billingRepository.findById(50L)).thenReturn(Optional.of(noPdf));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        stubPdfAndStorageAndSave();
+
+        var healed = service.ensurePdfForBilling(50L);
+
+        assertThat(healed.getPdfUrl()).isEqualTo("billings/key.pdf");
+        verify(pdf).renderMonthlyBilling(any());
+        verify(billingRepository).save(noPdf);
+
+        // Already-rendered billing: no render, no save.
+        var withPdf = new MonthlyBilling(51L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                LocalDate.now(), new BigDecimal("1000.00"), BillingStatus.DRAFT, "billings/existing.pdf", null,
+                Instant.now(), List.of());
+        when(billingRepository.findById(51L)).thenReturn(Optional.of(withPdf));
+
+        var unchanged = service.ensurePdfForBilling(51L);
+
+        assertThat(unchanged.getPdfUrl()).isEqualTo("billings/existing.pdf");
+        verify(billingRepository, never()).save(withPdf);
+    }
+
+    @Test
     void sync_addsBillableOrderToNewDraftPeriod() {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);
@@ -272,6 +336,61 @@ class MonthlyBillingServiceTest {
         assertThat(saved.getBillingNumber()).isEqualTo("BILL-AYI-202606");
         assertThat(saved.getTotal()).isEqualByComparingTo("5000.00");
         assertThat(saved.getLines()).singleElement().satisfies(l -> assertThat(l.orderId()).isEqualTo(77L));
+    }
+
+    @Test
+    void sync_editOnIssuedBill_rollsDeltaIntoNextOpenDraft() {
+        // KI-3 (option b): an order is on an ISSUED June bill at 5000; staff edit it to 8000. The
+        // frozen bill is untouched and the +3000 delta is rolled into the next open DRAFT (July).
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal("8000.00"), new BigDecimal("8000.00"), null, null);
+        var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"), List.of(line));
+        var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(edited));
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(issuedJune));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 6)).thenReturn(Optional.of(issuedJune));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 7)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(77L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());   // only the new July draft is written
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-AYI-202607");
+        assertThat(saved.getStatus()).isEqualTo(BillingStatus.DRAFT);
+        assertThat(saved.getTotal()).isEqualByComparingTo("3000.00");   // the rolled-forward delta
+        assertThat(saved.getLines()).singleElement().satisfies(l -> {
+            assertThat(l.orderId()).isEqualTo(77L);
+            assertThat(l.subtotal()).isEqualByComparingTo("3000.00");
+        });
+        verify(billingRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void sync_unchangedOrderOnIssuedBill_isNoOp() {
+        // The order is on an ISSUED bill and its amount has not changed → zero delta, nothing rolls
+        // forward, the frozen bill stays frozen. No writes at all.
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);
+        var unchanged = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of(line));
+        var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(unchanged));
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(issuedJune));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+
+        service.sync(77L);
+
+        verify(billingRepository, never()).save(any());
+        verify(billingRepository, never()).deleteById(any());
+        verifyNoInteractions(pdf, storage);
     }
 
     @Test

@@ -21,6 +21,13 @@ class DepartmentGatewayAdapter implements DepartmentGateway {
     }
 
     @Override
+    public List<DepartmentSnapshot> allForClient(Long clientId) {
+        return directory.allDepartments(clientId).stream()
+                .map(d -> new DepartmentSnapshot(d.id(), d.name()))
+                .toList();
+    }
+
+    @Override
     public boolean existsForClient(Long departmentId, Long clientId) {
         return directory.departmentBelongsToClient(departmentId, clientId);
     }

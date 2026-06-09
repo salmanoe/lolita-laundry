@@ -202,6 +202,14 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     }
 
     @Override
+    public List<DepartmentView> allDepartments(Long clientId) {
+        // No active filter — historical labels must resolve even for a deactivated department.
+        return departmentRepository.findByClientId(clientId).stream()
+                .map(d -> new DepartmentView(d.getId(), d.getName()))
+                .toList();
+    }
+
+    @Override
     public boolean departmentBelongsToClient(Long departmentId, Long clientId) {
         return departmentRepository.findById(departmentId)
                 .filter(d -> d.getClientId().equals(clientId))

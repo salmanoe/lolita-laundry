@@ -15,18 +15,21 @@ import id.co.lolita.laundry.order.domain.port.out.CatalogGateway;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
 import id.co.lolita.laundry.order.domain.port.out.DeliveryConfirmationRepository;
-import id.co.lolita.laundry.order.domain.port.out.DepartmentGateway;
 import id.co.lolita.laundry.order.domain.port.out.OrderRepository;
 import id.co.lolita.laundry.order.domain.port.out.OrderStatusHistoryRepository;
 import id.co.lolita.laundry.order.domain.port.out.PhotoStoragePort;
 import id.co.lolita.laundry.order.domain.port.out.PricingGateway;
+import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,6 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -62,8 +66,6 @@ class OrderServiceTest {
     @Mock
     ClientGateway clientGateway;
     @Mock
-    DepartmentGateway departmentGateway;
-    @Mock
     PricingGateway pricingGateway;
     @Mock
     CatalogGateway catalogGateway;
@@ -71,10 +73,19 @@ class OrderServiceTest {
     PhotoStoragePort photoStorage;
     @Mock
     ApplicationEventPublisher eventPublisher;
+    @Mock
+    ObjectProvider<OrderService> self;
     @InjectMocks
     OrderService service;
 
     private static final UUID TOKEN = UUID.randomUUID();
+
+    @BeforeEach
+    void wireSelf() {
+        // The creation paths re-enter via the self proxy (order-number retry); outside Spring the
+        // proxy is just the service itself. lenient — most tests don't exercise the creation path.
+        lenient().when(self.getObject()).thenReturn(service);
+    }
 
     private ClientSnapshot client(boolean perDepartment) {
         return new ClientSnapshot(1L, "Are You and I", "AYI", true, perDepartment);
@@ -200,13 +211,53 @@ class OrderServiceTest {
 
     @Test
     void deliver_rejectedWhenAlreadyDelivered() {
-        // Concurrency backstop: a second driver confirming an already-delivered order fails cleanly.
+        // Concurrency backstop: a second driver confirming an already-delivered order fails cleanly
+        // with a friendly 409 (ConflictException) rather than a raw error.
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DELIVERED)));
 
         assertThatThrownBy(() -> service.deliver(new DeliverOrderCommand(
                 99L, "Rina", "Joko", null, new byte[]{1, 2}, "image/jpeg", "p.jpg", null)))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("sudah dikirim");
         verify(photoStorage, never()).store(any(), any(), any());
+    }
+
+    @Test
+    void deliver_translatesConcurrentConfirmCollisionTo409_andStoresNoOrphanPhoto() {
+        // Two drivers pass the in-memory guard before either commits; the loser fails on
+        // UNIQUE(delivery_confirmations.order_id). It must surface as a friendly 409, and the
+        // photo must NOT have been written (store happens only after a successful save — KI-2).
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(deliveryRepository.save(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate order_id"));
+
+        assertThatThrownBy(() -> service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2, 3}, "image/jpeg", "proof.jpg", 5L)))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("sudah dikirim");
+        verify(photoStorage, never()).store(any(), any(), any());
+        verify(orderRepository, never()).save(any());   // order status never persisted
+    }
+
+    @Test
+    void submit_retriesOnceWhenOrderNumberCollides() {
+        // A concurrent submit grabbed the same computed order_number: the first save fails on
+        // UNIQUE(order_number); the retry recomputes the sequence and succeeds.
+        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
+                .thenReturn(0L)   // first attempt → -001
+                .thenReturn(1L);  // retry sees the winner committed → -002
+        when(orderRepository.save(any()))
+                .thenThrow(new DataIntegrityViolationException("duplicate order_number"))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.submit(new SubmitPublicOrderCommand(
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
+
+        var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-002";
+        assertThat(result.getOrderNumber()).isEqualTo(expected);
+        verify(orderRepository, times(2)).save(any());
     }
 
     @Test

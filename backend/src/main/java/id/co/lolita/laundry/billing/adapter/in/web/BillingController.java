@@ -59,6 +59,8 @@ class BillingController {
 
     @GetMapping("/{id}/pdf")
     BillingPdfUrlResponse pdf(@PathVariable Long id) {
+        // Lazily render the PDF if a past storage outage left it unattached, then pre-sign it.
+        generateBilling.ensurePdfForBilling(id);
         return new BillingPdfUrlResponse(billingQuery.getBillingPdfUrl(id));
     }
 

@@ -20,6 +20,15 @@ public interface GenerateMonthlyBillingUseCase {
     List<MonthlyBilling> generate(GenerateCommand command);
 
     /**
+     * Returns the billing, lazily rendering and storing its PDF if it has none yet. A monthly
+     * billing normally gets its PDF as it is auto-synced, but a storage outage during sync can
+     * leave {@code pdf_url} null (the event is retried, but the row may be viewed before then);
+     * this heals it on first view, mirroring the per-order invoice self-heal. Idempotent — a
+     * no-op once the PDF exists. Throws if the billing does not exist.
+     */
+    MonthlyBilling ensurePdfForBilling(Long id);
+
+    /**
      * Re-renders and re-stores the PDF for every existing billing (layout-only — totals, period
      * and status are unchanged), so a template change reaches documents already generated,
      * including ISSUED/PAID ones. Returns how many were refreshed.

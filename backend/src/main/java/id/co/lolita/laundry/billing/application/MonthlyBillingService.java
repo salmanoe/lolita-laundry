@@ -20,7 +20,9 @@ import id.co.lolita.laundry.billing.domain.port.out.MonthlyBillingRepository;
 import id.co.lolita.laundry.shared.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -28,9 +30,14 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 /**
  * Generates Monthly Billings and drives their {@code DRAFT → ISSUED → PAID} lifecycle.
@@ -54,9 +61,27 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     private final CompanyProfileGateway companyProfile;
     private final InvoicePdfPort pdf;
     private final BillingStoragePort storage;
+    // The single-thread executor that serializes the async order→billing sync. Manual rebuilds run
+    // on it too so a rebuild and an auto-sync for the same client/period can never overlap (KI-4).
+    private final Executor billingEventExecutor;
+    // Self-reference so the rebuild runs through the @Transactional proxy on the executor thread
+    // (a direct this.* call would bypass it). Lazy → no init cycle.
+    private final ObjectProvider<MonthlyBillingService> self;
 
+    /**
+     * Manual rebuild of a period's DRAFT. Dispatched onto the single-thread {@code
+     * billingEventExecutor} and awaited, so it is serialized with the async order→billing sync
+     * (KI-4): a sync event firing mid-rebuild can no longer resurrect a removed line or collide.
+     * Non-transactional itself — the actual work opens its transaction on the executor thread.
+     */
     @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public List<MonthlyBilling> generate(GenerateCommand command) {
+        return runOnBillingThread(() -> self.getObject().generateInternal(command));
+    }
+
+    @Transactional
+    public List<MonthlyBilling> generateInternal(GenerateCommand command) {
         var client = clients.findById(command.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + command.clientId()));
 
@@ -112,6 +137,30 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         return billingRepository.save(billing);
     }
 
+    /**
+     * Self-heals a billing whose PDF never attached (e.g. a storage outage during sync left
+     * {@code pdf_url} null). Runs on the billing-event executor so it cannot race a concurrent
+     * sync of the same billing, and re-enters via the self proxy for a writable transaction.
+     */
+    @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public MonthlyBilling ensurePdfForBilling(Long id) {
+        return runOnBillingThread(() -> self.getObject().ensurePdfForBillingInTx(id));
+    }
+
+    @Transactional
+    public MonthlyBilling ensurePdfForBillingInTx(Long id) {
+        var billing = billingRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Billing not found: " + id));
+        if (billing.getPdfUrl() != null && !billing.getPdfUrl().isBlank()) {
+            return billing;   // already rendered
+        }
+        renderAndAttach(billing);
+        var saved = billingRepository.save(billing);
+        log.info("Lazily rendered PDF for monthly billing {}", billing.getBillingNumber());
+        return saved;
+    }
+
     @Override
     public int regenerateAllPdfs() {
         int count = 0;
@@ -139,7 +188,8 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var snapshot = deliveredOrders.findBillableOrder(orderId);    // empty if canceled / gone
         var existing = billingRepository.findAllByOrderLine(orderId); // its current billing(s), if any
 
-        // Canceled / removed → drop from every billing it is on (only while still DRAFT).
+        // Canceled / removed → drop from every billing it is on (only while still DRAFT). A line on
+        // a frozen (ISSUED/PAID) bill cannot be retracted — the issued document is final.
         if (snapshot.isEmpty()) {
             for (var b : existing) {
                 if (b.getStatus() == BillingStatus.DRAFT) {
@@ -153,35 +203,55 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var client = clients.findById(o.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + o.clientId()));
         var portions = portionsOf(o, client.perDepartment());
-        var desiredDeptIds = portions.stream().map(Portion::departmentId).toList();
+        var naturalYm = YearMonth.of(o.orderDate().getYear(), o.orderDate().getMonthValue());
 
-        // Remove the order from any DRAFT billing whose department it no longer touches
-        // (e.g. an edit moved all of a department's items out of the order).
-        for (var b : existing) {
-            if (b.getStatus() == BillingStatus.DRAFT
-                    && desiredDeptIds.stream().noneMatch(d -> Objects.equals(d, b.getDepartmentId()))) {
-                dropOrderFrom(b, orderId);
-            }
-        }
+        // Reconcile every department the order currently touches *plus* every department it is
+        // already billed on — so a department an edit emptied out of the order is reconciled too
+        // . (Its line dropped from a DRAFT, or credited forward off a frozen bill.)
+        var deptIds = new LinkedHashSet<Long>();
+        portions.forEach(p -> deptIds.add(p.departmentId()));
+        existing.forEach(b -> deptIds.add(b.getDepartmentId()));
 
-        // Upsert each department portion into its billing.
-        for (var portion : portions) {
-            var line = MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), portion.subtotal());
-            var billingForDept = existing.stream()
-                    .filter(b -> Objects.equals(b.getDepartmentId(), portion.departmentId()))
+        for (var deptId : deptIds) {
+            // The order's portion for this department, if it still touches it (absent = emptied out).
+            var portion = portions.stream()
+                    .filter(p -> Objects.equals(p.departmentId(), deptId))
+                    .findFirst();
+            var desired = portion.map(Portion::subtotal).orElse(BigDecimal.ZERO);
+            var deptName = portion.map(Portion::departmentName).orElse(null);
+
+            // The bill in the order's natural period for this department, if the order is on one.
+            var naturalBill = existing.stream()
+                    .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                    .filter(b -> b.getPeriodYear() == naturalYm.getYear()
+                            && b.getPeriodMonth() == naturalYm.getMonthValue())
                     .findFirst();
 
-            if (billingForDept.isPresent()) {
-                var b = billingForDept.get();
-                if (b.getStatus() == BillingStatus.DRAFT) {   // frozen billings are left untouched
-                    b.upsertLine(line);
+            if (naturalBill.isPresent() && naturalBill.get().getStatus() != BillingStatus.DRAFT) {
+                // KI-3 (option b): the order's natural-period bill is frozen (ISSUED/PAID), so its
+                // line is immutable. Reconcile by rolling the DELTA against the frozen amount into
+                // the next open DRAFT — the edit's money is preserved, not silently lost.
+                if (deptName == null) {
+                    deptName = naturalBill.get().getDepartmentName();
+                }
+                var delta = desired.subtract(lineSubtotal(naturalBill.get(), orderId));
+                reconcileAdjustment(client, deptId, deptName, o, existing, naturalYm, delta);
+            } else if (naturalBill.isPresent()) {
+                // Natural-period DRAFT → upsert the full current amount, or drop the line if an edit
+                // moved all of this department's items out of the order.
+                var b = naturalBill.get();
+                if (desired.signum() == 0) {
+                    dropOrderFrom(b, orderId);
+                } else {
+                    b.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), desired));
                     renderAndAttach(b);
                     billingRepository.save(b);
                 }
-            } else {
-                var target = resolveTargetDraft(client, portion.departmentId(), portion.departmentName(),
-                        o.orderDate());
-                target.upsertLine(line);
+            } else if (desired.signum() != 0) {
+                // Not yet billed on this department → resolve the open DRAFT (rolling forward if the
+                // natural month is already closed) and upsert the full amount.
+                var target = resolveTargetDraft(client, deptId, deptName, o.orderDate());
+                target.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), desired));
                 renderAndAttach(target);
                 billingRepository.save(target);
             }
@@ -189,6 +259,68 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     }
 
     // ── helpers ──
+
+    /**
+     * Runs {@code work} on the single-thread {@code billingEventExecutor} and blocks for its result,
+     * so a manual rebuild is serialized with the async sync (KI-4). Runtime exceptions (the empty-period /
+     * regeneration-rejected / not-found guards) propagate to the caller unchanged.
+     */
+    private <T> T runOnBillingThread(Supplier<T> work) {
+        var future = new CompletableFuture<T>();
+        billingEventExecutor.execute(() -> {
+            try {
+                future.complete(work.get());
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while generating billing", e);
+        } catch (ExecutionException e) {
+            switch (e.getCause()) {
+                case RuntimeException re -> throw re;
+                case Error err -> throw err;
+                case null, default -> throw new IllegalStateException("Billing generation failed", e.getCause());
+            }
+        }
+    }
+
+    /**
+     * Rolls a billing delta for an order whose natural-period bill is frozen into the next open
+     * DRAFT period (KI-3 option b). A zero delta clears any stale adjustment line; a non-zero delta
+     * is upserted as a single line keyed by the order, so repeated edits always reflect the
+     * cumulative difference from the frozen amount rather than double-counting.
+     */
+    private void reconcileAdjustment(ClientInfo client, Long deptId, String deptName, DeliveredOrder o,
+                                     List<MonthlyBilling> existing, YearMonth naturalYm, BigDecimal delta) {
+        if (delta.signum() == 0) {
+            existing.stream()
+                    .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                    .filter(b -> b.getStatus() == BillingStatus.DRAFT)
+                    .filter(b -> !(b.getPeriodYear() == naturalYm.getYear()
+                            && b.getPeriodMonth() == naturalYm.getMonthValue()))
+                    .findFirst()
+                    .ifPresent(b -> dropOrderFrom(b, o.orderId()));
+            return;
+        }
+        var target = resolveTargetDraft(client, deptId, deptName, o.orderDate());
+        target.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), delta));
+        renderAndAttach(target);
+        billingRepository.save(target);
+    }
+
+    /**
+     * The subtotal currently billed for an order on a given billing (zero if it has no such line).
+     */
+    private static BigDecimal lineSubtotal(MonthlyBilling billing, Long orderId) {
+        return billing.getLines().stream()
+                .filter(l -> l.orderId().equals(orderId))
+                .map(MonthlyBillingLine::subtotal)
+                .findFirst().orElse(BigDecimal.ZERO);
+    }
 
     /**
      * A single department's share of one order (departmentId null for COMBINED clients).

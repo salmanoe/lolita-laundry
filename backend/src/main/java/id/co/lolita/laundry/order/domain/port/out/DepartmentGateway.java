@@ -12,5 +12,11 @@ public interface DepartmentGateway {
 
     List<DepartmentSnapshot> activeForClient(Long clientId);
 
+    /**
+     * All departments for a client, active and inactive — for labeling existing order lines so a
+     * department deactivated after an order was placed still resolves its (historical) name.
+     */
+    List<DepartmentSnapshot> allForClient(Long clientId);
+
     boolean existsForClient(Long departmentId, Long clientId);
 }

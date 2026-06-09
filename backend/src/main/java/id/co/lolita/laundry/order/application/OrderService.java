@@ -6,11 +6,15 @@ import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
 import id.co.lolita.laundry.order.domain.port.in.*;
 import id.co.lolita.laundry.order.domain.port.out.*;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
+import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import id.co.lolita.laundry.shared.Page;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -22,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,6 +49,9 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private final CatalogGateway catalogGateway;
     private final PhotoStoragePort photoStorage;
     private final ApplicationEventPublisher eventPublisher;
+    // Self-reference so the order-number retry can re-enter a fresh transaction per attempt
+    // (a plain this.* call would bypass the @Transactional proxy). Lazy → no init cycle.
+    private final ObjectProvider<OrderService> self;
 
     // ── GetOrderFormUseCase ──
 
@@ -81,10 +89,17 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
     // ── SubmitPublicOrderUseCase ──
 
+    // Non-transactional wrapper: the order-number retry must span transactions (each attempt
+    // re-reads the per-day sequence in a fresh tx), so the outer call suspends any ambient tx.
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Order submit(SubmitPublicOrderCommand command) {
         requireName(command.submittedByName());
+        return withOrderNumberRetry(() -> self.getObject().submitInTx(command));
+    }
+
+    @Transactional
+    public Order submitInTx(SubmitPublicOrderCommand command) {
         var client = activeClientByToken(command.token());
         return assemble(client, command.treatment(), null,
                 command.submittedByName(), command.notes(), null, command.items());
@@ -93,9 +108,14 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     // ── CreateOrderUseCase ──
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Order createOrder(CreateOrderCommand command) {
         requireName(command.submittedByName());
+        return withOrderNumberRetry(() -> self.getObject().createOrderInTx(command));
+    }
+
+    @Transactional
+    public Order createOrderInTx(CreateOrderCommand command) {
         var client = clientGateway.findById(command.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + command.clientId()));
         if (!client.active()) {
@@ -203,18 +223,32 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
         // Delivery is allowed from any status except already-DELIVERED: staff may forget to
         // advance through PROCESSING/DONE, but the laundry still physically gets delivered.
-        // markDelivered() fails fast if a second driver confirms an already-delivered order.
+        // A sequential second confirm sees DELIVERED here → friendly 409 (not a raw 400/500).
+        if (order.getStatus() == OrderStatus.DELIVERED) {
+            throw new ConflictException("Order sudah dikirim");
+        }
         var from = order.getStatus();
         var skipped = from.pathToDelivered();   // intermediate steps + DELIVERED, captured before the move
         order.markDelivered();
 
+        // Persist the confirmation first: UNIQUE(delivery_confirmations.order_id) is the real
+        // concurrency backstop — two drivers can both pass the in-memory guard above before
+        // either commits, and the second insert is what actually loses. Storing the photo only
+        // after a successful save avoids leaving an orphan object in storage (KI-2).
         var key = "photos/" + order.getOrderNumber()
                 + extensionFor(command.photoContentType(), command.photoFilename());
-        var storedKey = photoStorage.store(key, command.photo(), command.photoContentType());
-
         var confirmation = DeliveryConfirmation.create(order.getId(), command.recipientName(),
-                command.delivererName(), storedKey, command.notes(), Instant.now());
-        var saved = deliveryRepository.save(confirmation);
+                command.delivererName(), key, command.notes(), Instant.now());
+        DeliveryConfirmation saved;
+        try {
+            saved = deliveryRepository.save(confirmation);
+        } catch (DataIntegrityViolationException duplicate) {
+            // A concurrent driver confirmed this order first (IDENTITY id → the INSERT and its
+            // unique-constraint check happen at save time, so we catch it here).
+            throw new ConflictException("Order sudah dikirim");
+        }
+
+        photoStorage.store(key, command.photo(), command.photoContentType());
 
         orderRepository.save(order);
 
@@ -297,8 +331,10 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
     private DeliveredOrderDetail toDeliveredDetail(Order order) {
         // Resolve department display names once for the order's client (PER_DEPARTMENT only).
+        // Use all departments (incl. inactive): these are historical labels for an existing order,
+        // so a department deactivated after the order was placed must still resolve its name (KI-5).
         Map<Long, String> departmentNames = order.getLineItems().stream().anyMatch(li -> li.departmentId() != null)
-                ? departmentGateway.activeForClient(order.getClientId()).stream()
+                ? departmentGateway.allForClient(order.getClientId()).stream()
                 .collect(Collectors.toMap(DepartmentGateway.DepartmentSnapshot::id,
                         DepartmentGateway.DepartmentSnapshot::name))
                 : Map.of();
@@ -317,6 +353,24 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     }
 
     // ── helpers ──
+
+    /**
+     * Runs an order-creating attempt, retrying once if the computed {@code order_number}
+     * collided with a concurrent submit. Two submits for the same client on the same day both
+     * compute {@code seq = count + 1} → identical number; {@code UNIQUE(orders.order_number)}
+     * makes the loser fail with a {@link DataIntegrityViolationException}. Re-running recomputes
+     * the sequence (the winner is now committed and counted) so the second order gets the next
+     * number instead of being lost to a 500. Each attempt runs in its own transaction (the
+     * caller is {@code NOT_SUPPORTED}), so the first attempt's rollback is fully released before
+     * the retry re-reads the count.
+     */
+    private Order withOrderNumberRetry(Supplier<Order> attempt) {
+        try {
+            return attempt.get();
+        } catch (DataIntegrityViolationException collision) {
+            return attempt.get();
+        }
+    }
 
     private Order assemble(ClientSnapshot client, boolean treatment, LocalDate dueDate,
                            String submittedByName, String notes, Long createdByUserId, List<OrderLineInput> items) {

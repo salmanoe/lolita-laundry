@@ -1,7 +1,9 @@
 package id.co.lolita.laundry.shared.adapter.in.web;
 
+import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -35,6 +37,31 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Application-level conflict with a friendly, caller-facing message — a concurrency
+     * collision serialized by a unique constraint (e.g. a duplicate delivery confirm) that
+     * we translate ourselves rather than leaking the raw DB error.
+     */
+    @ExceptionHandler(ConflictException.class)
+    ProblemDetail handleConflict(ConflictException ex) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setTitle("Conflict");
+        return problem;
+    }
+
+    /**
+     * Optimistic-lock collision (KI-6): two transactions modified the same {@code orders} or
+     * {@code monthly_billings} row and the stale one lost the {@code @Version} check. Surface a
+     * retryable 409 instead of a raw 500 so the caller can reload and retry.
+     */
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail handleOptimisticLock(OptimisticLockingFailureException ex) {
+        var problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "Data ini baru saja diubah oleh proses lain. Muat ulang lalu coba lagi.");
+        problem.setTitle("Conflict");
+        return problem;
+    }
+
+    /**
      * Database constraint breaches that slip past application checks — a bad foreign key
      * (e.g. a price for a non-existent item) or a unique violation (duplicate client code,
      * duplicate price for the same item/date). Returns 409 rather than a raw 500.
@@ -64,7 +91,7 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.toMap(
                         FieldError::getField,
                         fe -> fe.getDefaultMessage() != null ? fe.getDefaultMessage() : "invalid",
-                        (a, b) -> a  // keep first error per field
+                        (a, _) -> a  // keep first error per field
                 ));
 
         var problem = ProblemDetail.forStatus(HttpStatus.UNPROCESSABLE_CONTENT);
