@@ -85,6 +85,24 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var client = clients.findById(command.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + command.clientId()));
 
+        // KI-8 guard: a period's DRAFT may hold orders rolled forward from a frozen natural month
+        // (their order_date is in a different period). A manual rebuild keys membership purely by
+        // order_date, so it cannot reproduce those rolled-in orders — replacing the DRAFT would
+        // silently drop them (lost revenue). Such a period is fully auto-maintained; refuse rather
+        // than corrupt it.
+        boolean hasRolledForward = billingRepository.findAll(command.clientId(), command.year(), command.month())
+                .stream()
+                .filter(b -> b.getStatus() == BillingStatus.DRAFT)
+                .flatMap(b -> b.getLines().stream())
+                .anyMatch(l -> l.orderDate().getYear() != command.year()
+                        || l.orderDate().getMonthValue() != command.month());
+        if (hasRolledForward) {
+            throw new IllegalArgumentException(
+                    ("Tagihan %s untuk %s memuat order yang digulirkan dari periode lain dan dikelola otomatis — "
+                            + "regenerasi manual tidak tersedia.")
+                            .formatted(BillingFormats.periodLabel(command.year(), command.month()), client.name()));
+        }
+
         var billable = deliveredOrders.findBillableOrders(command.clientId(), command.year(), command.month());
         if (billable.isEmpty()) {
             throw new IllegalArgumentException("Tidak ada order untuk %s pada periode %s"

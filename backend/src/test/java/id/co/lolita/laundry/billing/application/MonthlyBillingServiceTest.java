@@ -206,6 +206,24 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
+    void generate_rejectsPeriodHoldingRolledForwardOrders() {
+        // KI-8: the July DRAFT holds an order rolled forward from a frozen June (order_date in June).
+        // A manual rebuild keys membership by order_date and can't reproduce it, so it must refuse
+        // rather than silently drop the rolled-in order.
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        var julyDraft = new MonthlyBilling(60L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(billingRepository.findAll(COMBINED_CLIENT, 2026, 7)).thenReturn(List.of(julyDraft));
+
+        assertThatThrownBy(() -> service.generate(new GenerateCommand(COMBINED_CLIENT, 2026, 7)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("digulirkan");
+        verify(billingRepository, never()).deleteById(any());
+        verify(billingRepository, never()).save(any());
+    }
+
+    @Test
     void generate_rejectsEmptyPeriod() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of());
