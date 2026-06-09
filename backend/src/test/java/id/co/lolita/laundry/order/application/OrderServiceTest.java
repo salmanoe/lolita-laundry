@@ -261,6 +261,42 @@ class OrderServiceTest {
     }
 
     @Test
+    void submit_retriesAcrossSeveralCollisions_thenSucceeds() {
+        // A runtime burst showed a single retry is too thin; the loop tolerates several rounds.
+        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
+                .thenReturn(0L, 1L, 2L, 3L);
+        when(orderRepository.save(any()))
+                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.submit(new SubmitPublicOrderCommand(
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, new BigDecimal("1")))));
+
+        var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-004";
+        assertThat(result.getOrderNumber()).isEqualTo(expected);
+        verify(orderRepository, times(4)).save(any());
+    }
+
+    @Test
+    void submit_exhaustsRetries_throwsFriendlyConflict() {
+        // Every attempt collides → a friendly 409, never the raw DB error or a 500.
+        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
+        when(orderRepository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
+
+        assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("coba lagi");
+        verify(orderRepository, times(8)).save(any());   // MAX_ORDER_NUMBER_ATTEMPTS
+    }
+
+    @Test
     void deliver_allowedFromReceived_autoStampsSkippedSteps() {
         // Staff never advanced the order — delivery is still allowed and backfills the skipped steps.
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
