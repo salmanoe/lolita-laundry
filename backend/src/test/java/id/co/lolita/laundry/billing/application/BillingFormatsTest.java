@@ -36,6 +36,15 @@ class BillingFormatsTest {
     }
 
     @Test
+    void terbilang_handlesNegativeCreditTotals() {
+        // KI-11: a credit-carrying DRAFT can have a negative total; spelling must not throw
+        // (a negative array index) — it renders as "Minus …" so the ledger draft's PDF renders.
+        assertThat(BillingFormats.terbilang(new BigDecimal("-3000")))
+                .isEqualTo("Minus Tiga Ribu Rupiah");
+        assertThat(BillingFormats.terbilang(new BigDecimal("-5"))).isEqualTo("Minus Lima Rupiah");
+    }
+
+    @Test
     void periodDescription_spansFirstToLastDayOfMonth() {
         assertThat(BillingFormats.periodDescription(2026, 6)).isEqualTo("Laundry Periode 1 June - 30 June 2026");
         assertThat(BillingFormats.periodDescription(2026, 2)).isEqualTo("Laundry Periode 1 February - 28 February 2026");

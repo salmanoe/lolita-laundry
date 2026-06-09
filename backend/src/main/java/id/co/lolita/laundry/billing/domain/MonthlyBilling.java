@@ -105,6 +105,17 @@ public class MonthlyBilling {
             throw new IllegalArgumentException(
                     "Cannot change billing status from %s to %s".formatted(status, target));
         }
+        // KI-11: a credit rolled forward off a frozen bill (an edit that shrank or emptied an order
+        // already on an ISSUED/PAID document) can leave a DRAFT with a net-negative grand total —
+        // money owed back to the client. That draft is a valid running ledger (it nets to positive
+        // as the period's later orders join it), but it must never become a client-facing INVOICE.
+        // Block the ISSUED transition while the total is negative; staff wait for offsetting orders
+        // or settle the credit out of band.
+        if (target == BillingStatus.ISSUED && total != null && total.signum() < 0) {
+            throw new IllegalArgumentException(
+                    "Tagihan ini bersaldo negatif (kredit untuk klien) dan belum bisa diterbitkan. "
+                            + "Tunggu order berikutnya pada periode ini atau selesaikan kredit secara manual.");
+        }
         this.status = target;
     }
 

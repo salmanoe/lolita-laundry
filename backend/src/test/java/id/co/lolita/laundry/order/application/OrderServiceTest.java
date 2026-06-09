@@ -261,6 +261,42 @@ class OrderServiceTest {
     }
 
     @Test
+    void submit_retriesAcrossSeveralCollisions_thenSucceeds() {
+        // A runtime burst showed a single retry is too thin; the loop tolerates several rounds.
+        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
+                .thenReturn(0L, 1L, 2L, 3L);
+        when(orderRepository.save(any()))
+                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.submit(new SubmitPublicOrderCommand(
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, new BigDecimal("1")))));
+
+        var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-004";
+        assertThat(result.getOrderNumber()).isEqualTo(expected);
+        verify(orderRepository, times(4)).save(any());
+    }
+
+    @Test
+    void submit_exhaustsRetries_throwsFriendlyConflict() {
+        // Every attempt collides → a friendly 409, never the raw DB error or a 500.
+        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
+        when(orderRepository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
+
+        assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
+                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("coba lagi");
+        verify(orderRepository, times(8)).save(any());   // MAX_ORDER_NUMBER_ATTEMPTS
+    }
+
+    @Test
     void deliver_allowedFromReceived_autoStampsSkippedSteps() {
         // Staff never advanced the order — delivery is still allowed and backfills the skipped steps.
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
@@ -303,6 +339,38 @@ class OrderServiceTest {
         verify(historyRepository).save(any());
         // Billing reacts to this event to generate the order invoice.
         verify(eventPublisher).publishEvent(any(OrderDeliveredEvent.class));
+    }
+
+    @Test
+    void deliver_sanitizesPhotoKeyAgainstACraftedFilename() {
+        // KI-10: a non-image content type makes extensionFor fall back to the client filename's
+        // suffix. A crafted name with path separators must NOT leak into the storage key — the
+        // extension is whitelisted, so anything unrecognized defaults to .jpg.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(photoStorage.store(any(), any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(deliveryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var confirmation = service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2, 3},
+                "application/octet-stream", "evil.php/../../etc/passwd", 5L));
+
+        assertThat(confirmation.getPhotoUrl()).isEqualTo("photos/AYI-20260101-001.jpg");
+        verify(photoStorage).store(eq("photos/AYI-20260101-001.jpg"), any(), eq("application/octet-stream"));
+    }
+
+    @Test
+    void deliver_usesKnownImageExtensionFromFilenameWhenContentTypeMissing() {
+        // A missing content type with a recognized image suffix is honored (whitelisted).
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(photoStorage.store(any(), any(), any())).thenAnswer(inv -> inv.getArgument(0));
+        when(deliveryRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var confirmation = service.deliver(new DeliverOrderCommand(
+                99L, "Rina", "Joko", null, new byte[]{1, 2, 3}, null, "proof.PNG", 5L));
+
+        assertThat(confirmation.getPhotoUrl()).isEqualTo("photos/AYI-20260101-001.png");
     }
 
     @Test

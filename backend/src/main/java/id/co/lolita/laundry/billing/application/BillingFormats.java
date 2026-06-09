@@ -105,6 +105,12 @@ final class BillingFormats {
      */
     static String terbilang(BigDecimal amount) {
         long n = (amount == null ? BigDecimal.ZERO : amount).setScale(0, RoundingMode.HALF_UP).longValueExact();
+        // A net-negative total can occur on a credit-carrying DRAFT (KI-11). spell() indexes its
+        // word tables with the value, so a negative n would throw — spell the magnitude and prefix
+        // "Minus" so the ledger draft still renders.
+        if (n < 0) {
+            return titleCase("minus " + spell(-n).trim()) + " Rupiah";
+        }
         String words = n == 0 ? "nol" : spell(n).trim();
         return titleCase(words) + " Rupiah";
     }

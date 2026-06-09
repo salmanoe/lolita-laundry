@@ -25,7 +25,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -52,6 +55,13 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     // Self-reference so the order-number retry can re-enter a fresh transaction per attempt
     // (a plain this.* call would bypass the @Transactional proxy). Lazy → no init cycle.
     private final ObjectProvider<OrderService> self;
+
+    // In-JVM serialization of order creation per client (single-VM deployment). Holding this lock
+    // across the create transaction means each submit reads the per-day sequence only after the
+    // previous one committed → no order_number collision in practice. The UNIQUE constraint + the
+    // bounded retry below remain the cross-instance / paranoia backstop. (final + initializer →
+    // excluded from the @RequiredArgsConstructor.)
+    private final ConcurrentHashMap<String, ReentrantLock> orderCreationLocks = new ConcurrentHashMap<>();
 
     // ── GetOrderFormUseCase ──
 
@@ -95,7 +105,8 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Order submit(SubmitPublicOrderCommand command) {
         requireName(command.submittedByName());
-        return withOrderNumberRetry(() -> self.getObject().submitInTx(command));
+        return serializedPerClient("tok:" + command.token(),
+                () -> withOrderNumberRetry(() -> self.getObject().submitInTx(command)));
     }
 
     @Transactional
@@ -111,7 +122,8 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public Order createOrder(CreateOrderCommand command) {
         requireName(command.submittedByName());
-        return withOrderNumberRetry(() -> self.getObject().createOrderInTx(command));
+        return serializedPerClient("cli:" + command.clientId(),
+                () -> withOrderNumberRetry(() -> self.getObject().createOrderInTx(command)));
     }
 
     @Transactional
@@ -355,20 +367,49 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     // ── helpers ──
 
     /**
-     * Runs an order-creating attempt, retrying once if the computed {@code order_number}
-     * collided with a concurrent submit. Two submits for the same client on the same day both
-     * compute {@code seq = count + 1} → identical number; {@code UNIQUE(orders.order_number)}
-     * makes the loser fail with a {@link DataIntegrityViolationException}. Re-running recomputes
-     * the sequence (the winner is now committed and counted) so the second order gets the next
-     * number instead of being lost to a 500. Each attempt runs in its own transaction (the
-     * caller is {@code NOT_SUPPORTED}), so the first attempt's rollback is fully released before
-     * the retry re-reads the count.
+     * Serializes order creation for one client (single-VM deployment) so concurrent submits don't
+     * compute the same {@code order_number}. The lock is held across the whole create — including
+     * the inner transaction's commit — so the next waiter reads the per-day sequence only after
+     * the previous order is visible.
+     */
+    private <T> T serializedPerClient(String key, Supplier<T> work) {
+        var lock = orderCreationLocks.computeIfAbsent(key, k -> new ReentrantLock());
+        lock.lock();
+        try {
+            return work.get();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // Cross-instance / paranoia backstop only — the per-client lock above prevents in-JVM
+    // collisions, so this rarely runs. A generous bound still terminates a pathological storm.
+    private static final int MAX_ORDER_NUMBER_ATTEMPTS = 8;
+
+    /**
+     * Runs an order-creating attempt, retrying on an {@code order_number} collision with a
+     * concurrent submit. Submits for the same client on the same day each compute
+     * {@code seq = count + 1} → identical number; {@code UNIQUE(orders.order_number)} makes the
+     * loser fail with a {@link DataIntegrityViolationException}. Re-running recomputes the sequence
+     * (winners are now committed and counted) so each retried order gets the next free number.
+     * Each attempt runs in its own transaction (the caller is {@code NOT_SUPPORTED}), so a failed
+     * attempt's rollback is fully released before the retry re-reads the count. A runtime burst
+     * showed a single retry is too thin under heavy contention, so we loop a bounded number of
+     * times and, only if every round still collides, surface a friendly 409 instead of the raw
+     * DB error.
      */
     private Order withOrderNumberRetry(Supplier<Order> attempt) {
+        for (int remaining = MAX_ORDER_NUMBER_ATTEMPTS; remaining > 1; remaining--) {
+            try {
+                return attempt.get();
+            } catch (DataIntegrityViolationException collision) {
+                // a concurrent submit took our number — recompute the sequence and retry
+            }
+        }
         try {
-            return attempt.get();
-        } catch (DataIntegrityViolationException collision) {
-            return attempt.get();
+            return attempt.get();   // last attempt — let a non-collision error propagate as-is
+        } catch (DataIntegrityViolationException exhausted) {
+            throw new ConflictException("Order bersamaan sedang ramai, nomor order bentrok. Silakan coba lagi.");
         }
     }
 
@@ -448,6 +489,11 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         }
     }
 
+    // The only extensions allowed into the storage key. The fallback below is whitelisted against
+    // this set so an untrusted client filename can never inject path separators / odd segments
+    // (KI-10) — anything unrecognized defaults to .jpg.
+    private static final Set<String> ALLOWED_PHOTO_EXTENSIONS = Set.of(".jpg", ".jpeg", ".png", ".webp");
+
     private static String extensionFor(String contentType, String filename) {
         if (contentType != null) {
             if (contentType.equalsIgnoreCase("image/jpeg") || contentType.equalsIgnoreCase("image/jpg")) {
@@ -460,10 +506,15 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
                 return ".webp";
             }
         }
+        // Fall back to the client filename's suffix only when it is a known image extension —
+        // never concatenate an unsanitized client string straight into the storage key (KI-10).
         if (filename != null) {
             int dot = filename.lastIndexOf('.');
             if (dot >= 0 && dot < filename.length() - 1) {
-                return filename.substring(dot).toLowerCase();
+                var ext = filename.substring(dot).toLowerCase();
+                if (ALLOWED_PHOTO_EXTENSIONS.contains(ext)) {
+                    return ext;
+                }
             }
         }
         return ".jpg";

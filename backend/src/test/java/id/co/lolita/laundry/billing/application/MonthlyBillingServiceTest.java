@@ -206,6 +206,24 @@ class MonthlyBillingServiceTest {
     }
 
     @Test
+    void generate_rejectsPeriodHoldingRolledForwardOrders() {
+        // KI-8: the July DRAFT holds an order rolled forward from a frozen June (order_date in June).
+        // A manual rebuild keys membership by order_date and can't reproduce it, so it must refuse
+        // rather than silently drop the rolled-in order.
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        var julyDraft = new MonthlyBilling(60L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        when(billingRepository.findAll(COMBINED_CLIENT, 2026, 7)).thenReturn(List.of(julyDraft));
+
+        assertThatThrownBy(() -> service.generate(new GenerateCommand(COMBINED_CLIENT, 2026, 7)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("digulirkan");
+        verify(billingRepository, never()).deleteById(any());
+        verify(billingRepository, never()).save(any());
+    }
+
+    @Test
     void generate_rejectsEmptyPeriod() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of());
@@ -367,6 +385,46 @@ class MonthlyBillingServiceTest {
         assertThat(saved.getLines()).singleElement().satisfies(l -> {
             assertThat(l.orderId()).isEqualTo(77L);
             assertThat(l.subtotal()).isEqualByComparingTo("3000.00");
+        });
+        verify(billingRepository, never()).deleteById(any());
+    }
+
+    @Test
+    void sync_editAcrossTwoFrozenPeriods_netsAgainstAllFrozenLines() {
+        // KI-9: order 77 (natural June) is on an ISSUED June bill at 5000; a prior edit's +3000
+        // adjustment was rolled into July, which is now ALSO ISSUED. A further edit takes the order
+        // to 10000. The delta must net against BOTH frozen lines (5000 + 3000 = 8000), so only the
+        // residual +2000 rolls into the next open DRAFT (August) — not 10000 − 5000 = 5000, which
+        // would re-bill July's frozen 3000 a second time.
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal("10000.00"), new BigDecimal("10000.00"), null, null);
+        var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("10000.00"), List.of(line));
+        var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
+        var issuedJuly = new MonthlyBilling(60L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                LocalDate.now(), new BigDecimal("3000.00"), BillingStatus.ISSUED, "billings/k2.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("3000.00"))));
+        when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(edited));
+        when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(issuedJune, issuedJuly));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 6)).thenReturn(Optional.of(issuedJune));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 7)).thenReturn(Optional.of(issuedJuly));
+        when(billingRepository.findExisting(COMBINED_CLIENT, null, 2026, 8)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(77L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());   // only the new August draft is written
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-AYI-202608");
+        assertThat(saved.getStatus()).isEqualTo(BillingStatus.DRAFT);
+        assertThat(saved.getTotal()).isEqualByComparingTo("2000.00");   // 10000 − (5000 + 3000)
+        assertThat(saved.getLines()).singleElement().satisfies(l -> {
+            assertThat(l.orderId()).isEqualTo(77L);
+            assertThat(l.subtotal()).isEqualByComparingTo("2000.00");
         });
         verify(billingRepository, never()).deleteById(any());
     }
