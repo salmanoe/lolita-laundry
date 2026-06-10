@@ -29,7 +29,9 @@ jobs:
 
       - name: Build bootJar
         working-directory: backend
-        run: ./gradlew bootJar --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew bootJar --no-daemon
 
       # Stage under a temp name so we can swap atomically on the VPS — overwriting a
       # jar the running JVM still lazy-loads classes from can corrupt the live process.
