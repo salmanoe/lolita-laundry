@@ -49,6 +49,6 @@ class DeliveredOrderGatewayAdapter implements DeliveredOrderGateway {
                         l.departmentId(), l.departmentName()))
                 .toList();
         return new DeliveredOrder(d.orderId(), d.orderNumber(), d.clientId(),
-                d.orderDate(), d.pricingMultiplier(), d.total(), lines);
+                d.orderDate(), d.pricingMultiplier(), d.total(), d.delivered(), lines);
     }
 }

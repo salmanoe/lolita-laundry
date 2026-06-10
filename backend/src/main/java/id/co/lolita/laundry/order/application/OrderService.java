@@ -57,7 +57,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private final ObjectProvider<OrderService> self;
 
     // In-JVM serialization of order creation per client (single-VM deployment). Holding this lock
-    // across the create transaction means each submit reads the per-day sequence only after the
+    // across the creation transaction means each submit reads the per-day sequence only after the
     // previous one committed → no order_number collision in practice. The UNIQUE constraint + the
     // bounded retry below remain the cross-instance / paranoia backstop. (final + initializer →
     // excluded from the @RequiredArgsConstructor.)
@@ -361,7 +361,8 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
         }).toList();
 
         return new DeliveredOrderDetail(order.getId(), order.getOrderNumber(), order.getClientId(),
-                order.getOrderDate(), order.getPricingMultiplier(), order.total(), lines);
+                order.getOrderDate(), order.getPricingMultiplier(), order.total(),
+                order.getStatus() == OrderStatus.DELIVERED, lines);
     }
 
     // ── helpers ──
@@ -373,7 +374,7 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
      * the previous order is visible.
      */
     private <T> T serializedPerClient(String key, Supplier<T> work) {
-        var lock = orderCreationLocks.computeIfAbsent(key, k -> new ReentrantLock());
+        var lock = orderCreationLocks.computeIfAbsent(key, _ -> new ReentrantLock());
         lock.lock();
         try {
             return work.get();

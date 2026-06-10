@@ -34,7 +34,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
- * OrderInvoiceService: idempotency (event redelivery is safe) and the create-and-attach-PDF flow.
+ * OrderInvoiceService: the create-or-refresh-and-attach-PDF flow. The invoice is viewable from
+ * RECEIVED (live preview, re-rendered each view) and frozen once the order is DELIVERED.
  */
 @ExtendWith(MockitoExtension.class)
 class OrderInvoiceServiceTest {
@@ -58,24 +59,17 @@ class OrderInvoiceServiceTest {
             "Jl. Sukaraja No. 318 Bandung", "082318359775", "Alban Valentino Ramatir",
             "Bank BCA", "4061792362", "Lolita Laundry");
 
-    @Test
-    void createForDeliveredOrder_isIdempotent_whenInvoiceExists() {
-        when(invoiceRepository.existsByOrderId(99L)).thenReturn(true);
-
-        service.createForDeliveredOrder(99L);
-
-        verify(invoiceRepository, never()).save(any());
-        verifyNoInteractions(deliveredOrders, clients, pdf, storage);
+    private static DeliveredOrder order(boolean delivered) {
+        return new DeliveredOrder(99L, "AYI-20260601-001", 1L,
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"), delivered,
+                List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
+                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
     }
 
     @Test
     void createForDeliveredOrder_buildsInvoice_rendersPdf_andStores() {
-        when(invoiceRepository.existsByOrderId(99L)).thenReturn(false);
-        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
-                List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
-                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
-        when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
+        when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.empty());
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
         when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
@@ -91,59 +85,99 @@ class OrderInvoiceServiceTest {
         assertThat(saved.getOrderId()).isEqualTo(99L);
         assertThat(saved.getSubtotal()).isEqualByComparingTo("8000.00");
         assertThat(saved.getPdfUrl()).isEqualTo("invoices/INV-AYI-20260601-001.pdf");
-        // Company letterhead frozen onto the invoice at creation.
+        // Company letterhead snapshotted onto the invoice.
         assertThat(saved.getCompanyName()).isEqualTo("Lolita Laundry");
         assertThat(saved.getCompanyAddress()).isEqualTo("Jl. Sukaraja No. 318 Bandung");
         assertThat(saved.getCompanyPhone()).isEqualTo("082318359775");
     }
 
     @Test
-    void ensurePdfForOrder_returnsExisting_whenPdfAlreadyPresent() {
+    void createForDeliveredOrder_refreshesExistingPreview_atDelivery() {
+        // A preview was rendered while the order was open; delivery re-renders the same row.
+        var preview = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
+                LocalDate.of(2026, 6, 1), new BigDecimal("4000.00"),
+                "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");
+        preview.attachPdf("invoices/INV-AYI-20260601-001.pdf");
+        when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(preview));
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
+        when(invoiceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.createForDeliveredOrder(99L);
+
+        // The same row is refreshed to the final order total.
+        verify(invoiceRepository).save(preview);
+        assertThat(preview.getSubtotal()).isEqualByComparingTo("8000.00");
+    }
+
+    @Test
+    void prepareInvoiceForOrder_returnsExisting_whenDeliveredAndPdfPresent() {
         var invoice = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
                 LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"),
                 "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");
         invoice.attachPdf("invoices/INV-AYI-20260601-001.pdf");
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(invoice));
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
 
-        var result = service.ensurePdfForOrder(99L);
+        var result = service.prepareInvoiceForOrder(99L);
 
         assertThat(result.getPdfUrl()).isEqualTo("invoices/INV-AYI-20260601-001.pdf");
+        // Frozen: no re-render once delivered.
         verify(invoiceRepository, never()).save(any());
-        verifyNoInteractions(deliveredOrders, clients, pdf, storage);
+        verifyNoInteractions(clients, pdf, storage, companyProfile);
     }
 
     @Test
-    void ensurePdfForOrder_rendersStoresAndSaves_whenPdfMissing() {
-        var invoice = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
-                LocalDate.of(2026, 6, 1), new BigDecimal("8000.00"),
-                "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");   // no PDF (e.g. backfilled)
-        when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(invoice));
-        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
-                List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
-                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
-        when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
+    void prepareInvoiceForOrder_refreshesPreview_whenOrderStillOpen() {
+        // Existing preview with a PDF, but the order is not yet delivered → re-render.
+        var preview = OrderInvoice.create("INV-AYI-20260601-001", 99L, 1L,
+                LocalDate.of(2026, 6, 1), new BigDecimal("4000.00"),
+                "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");
+        preview.attachPdf("invoices/INV-AYI-20260601-001.pdf");
+        when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(preview));
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(false)));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
+        when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
-        when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any()))
-                .thenReturn("invoices/INV-AYI-20260601-001.pdf");
+        when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
         when(invoiceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var result = service.ensurePdfForOrder(99L);
+        service.prepareInvoiceForOrder(99L);
 
-        assertThat(result.getPdfUrl()).isEqualTo("invoices/INV-AYI-20260601-001.pdf");
-        verify(invoiceRepository).save(invoice);
+        verify(invoiceRepository).save(preview);
+        assertThat(preview.getSubtotal()).isEqualByComparingTo("8000.00");
     }
 
     @Test
-    void ensurePdfForOrder_throwsNotFound_whenNoInvoice() {
+    void prepareInvoiceForOrder_createsPreview_whenNoInvoiceYet() {
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.empty());
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(false)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
+        when(invoiceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.ensurePdfForOrder(99L))
+        var result = service.prepareInvoiceForOrder(99L);
+
+        assertThat(result.getInvoiceNumber()).isEqualTo("INV-AYI-20260601-001");
+        assertThat(result.getPdfUrl()).isEqualTo("invoices/INV-AYI-20260601-001.pdf");
+        verify(invoiceRepository).save(any());
+    }
+
+    @Test
+    void prepareInvoiceForOrder_throwsNotFound_whenOrderNotBillable() {
+        when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.empty());
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.prepareInvoiceForOrder(99L))
                 .isInstanceOf(NotFoundException.class);
 
         verify(invoiceRepository, never()).save(any());
-        verifyNoInteractions(deliveredOrders, clients, pdf, storage);
+        verifyNoInteractions(clients, pdf, storage);
     }
 
     @Test
@@ -153,11 +187,7 @@ class OrderInvoiceServiceTest {
                 "Lolita Laundry", "Jl. Sukaraja No. 318 Bandung", "082318359775");
         invoice.attachPdf("invoices/INV-AYI-20260601-001.pdf");   // already has a PDF — still re-rendered
         when(invoiceRepository.findAll()).thenReturn(List.of(invoice));
-        var order = new DeliveredOrder(99L, "AYI-20260601-001", 1L,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"),
-                List.of(new InvoiceLine("Sheet King", "Pcs", new BigDecimal("2"),
-                        new BigDecimal("4000"), new BigDecimal("8000.00"), null, null)));
-        when(deliveredOrders.findDeliveredOrder(99L)).thenReturn(Optional.of(order));
+        when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
         when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false)));
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any()))

@@ -23,9 +23,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Generates the per-order invoice when an order is delivered. Invoked by the event adapter
- * in response to {@code OrderDeliveredEvent}. Idempotent so event redelivery (the Modulith
- * registry retries incomplete publications) never produces a duplicate invoice.
+ * Generates the per-order invoice. The invoice is viewable from the moment the order is
+ * RECEIVED: {@link #prepareInvoiceForOrder} creates-or-refreshes a live <em>preview</em> while
+ * the order is still open, and the {@code OrderDeliveredEvent} listener calls
+ * {@link #createForDeliveredOrder} to render the authoritative, frozen invoice at delivery.
+ * Both paths are idempotent — there is a single invoice row per order (keyed on order id), so
+ * event redelivery and repeated views never duplicate it.
  */
 @Service
 @Transactional
@@ -44,59 +47,67 @@ class OrderInvoiceService implements CreateOrderInvoiceUseCase {
 
     @Override
     public void createForDeliveredOrder(Long orderId) {
-        if (invoiceRepository.existsByOrderId(orderId)) {
-            return;   // already invoiced — idempotent
-        }
-
-        DeliveredOrder order = deliveredOrders.findDeliveredOrder(orderId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Delivered order not found for invoicing: " + orderId));
-        var client = clients.findById(order.clientId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Client not found for invoicing order " + orderId));
-
-        // Freeze the company letterhead as it stands now — an order invoice is an immutable
-        // reference document.
-        var company = companyProfile.current();
-        var invoiceNumber = INVOICE_NUMBER_PREFIX + order.orderNumber();
-        var invoice = OrderInvoice.create(invoiceNumber, orderId, order.clientId(),
-                LocalDate.now(), order.total(), company.companyName(), company.address(), company.phone());
-
-        renderStoreAndAttachPdf(invoice, order, client.name(), client.clientCode());
-
-        invoiceRepository.save(invoice);
-        log.info("Generated order invoice {} for order {}", invoiceNumber, order.orderNumber());
+        // Delivery is the authoritative freeze point: render from the final order state,
+        // overwriting any preview produced while the order was still open. Idempotent — event
+        // redelivery just re-renders the same delivered state into the same invoice row.
+        var invoice = renderInvoiceForOrder(orderId);
+        log.info("Froze order invoice {} at delivery (order {})",
+                invoice.getInvoiceNumber(), orderId);
     }
 
     @Override
-    public OrderInvoice ensurePdfForOrder(Long orderId) {
-        var invoice = invoiceRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new NotFoundException("No invoice for order " + orderId));
-        if (invoice.getPdfUrl() != null && !invoice.getPdfUrl().isBlank()) {
-            return invoice;   // already rendered
+    public OrderInvoice prepareInvoiceForOrder(Long orderId) {
+        var existing = invoiceRepository.findByOrderId(orderId);
+        // A delivered order is final: once its invoice has a PDF, never touch it again so a later
+        // company-profile change can't rewrite a settled document.
+        if (existing.isPresent() && hasPdf(existing.get())
+                && deliveredOrders.findBillableOrder(orderId).map(DeliveredOrder::delivered).orElse(false)) {
+            return existing.get();
         }
+        // Otherwise (no invoice yet, or the order is still open) create-or-refresh the preview
+        // from the current order/company state.
+        return renderInvoiceForOrder(orderId);
+    }
 
-        var order = deliveredOrders.findDeliveredOrder(orderId)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Delivered order not found for invoicing: " + orderId));
+    /**
+     * Creates the invoice (first call) or refreshes the existing one, then renders, stores and
+     * saves it. Membership is "any billable (non-canceled) order", so the invoice is available
+     * from RECEIVED onward; a canceled/unknown order has no invoice (404).
+     */
+    private OrderInvoice renderInvoiceForOrder(Long orderId) {
+        DeliveredOrder order = deliveredOrders.findBillableOrder(orderId)
+                .orElseThrow(() -> new NotFoundException("No billable order to invoice: " + orderId));
         var client = clients.findById(order.clientId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Client not found for invoicing order " + orderId));
+        var company = companyProfile.current();
+
+        var invoice = invoiceRepository.findByOrderId(orderId)
+                .map(existing -> {
+                    existing.refresh(LocalDate.now(), order.total(),
+                            company.companyName(), company.address(), company.phone());
+                    return existing;
+                })
+                .orElseGet(() -> OrderInvoice.create(
+                        INVOICE_NUMBER_PREFIX + order.orderNumber(), orderId, order.clientId(),
+                        LocalDate.now(), order.total(),
+                        company.companyName(), company.address(), company.phone()));
 
         renderStoreAndAttachPdf(invoice, order, client.name(), client.clientCode());
-        var saved = invoiceRepository.save(invoice);
-        log.info("Lazily rendered PDF for order invoice {} (order {})",
-                invoice.getInvoiceNumber(), order.orderNumber());
-        return saved;
+        return invoiceRepository.save(invoice);
+    }
+
+    private static boolean hasPdf(OrderInvoice invoice) {
+        return invoice.getPdfUrl() != null && !invoice.getPdfUrl().isBlank();
     }
 
     @Override
     public int regenerateAllPdfs() {
         int count = 0;
         for (OrderInvoice invoice : invoiceRepository.findAll()) {
-            var order = deliveredOrders.findDeliveredOrder(invoice.getOrderId()).orElse(null);
+            var order = deliveredOrders.findBillableOrder(invoice.getOrderId()).orElse(null);
             if (order == null) {
-                log.warn("Skipping PDF refresh for invoice {} — delivered order {} not found",
+                log.warn("Skipping PDF refresh for invoice {} — billable order {} not found",
                         invoice.getInvoiceNumber(), invoice.getOrderId());
                 continue;
             }

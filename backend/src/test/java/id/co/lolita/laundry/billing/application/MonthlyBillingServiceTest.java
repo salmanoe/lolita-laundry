@@ -99,7 +99,7 @@ class MonthlyBillingServiceTest {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal(total), new BigDecimal(total), deptId, deptName);
         return new DeliveredOrder(System.nanoTime(), number, PBS,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal(total), List.of(line));
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal(total), true, List.of(line));
     }
 
     private void stubPdfAndStorageAndSave() {
@@ -339,7 +339,7 @@ class MonthlyBillingServiceTest {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);
         var o = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of(line));
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), true, List.of(line));
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(o));
         when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of());
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
@@ -363,7 +363,7 @@ class MonthlyBillingServiceTest {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal("8000.00"), new BigDecimal("8000.00"), null, null);
         var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"), List.of(line));
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"), true, List.of(line));
         var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
@@ -399,7 +399,7 @@ class MonthlyBillingServiceTest {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal("10000.00"), new BigDecimal("10000.00"), null, null);
         var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("10000.00"), List.of(line));
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("10000.00"), true, List.of(line));
         var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
@@ -436,7 +436,7 @@ class MonthlyBillingServiceTest {
         var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
                 new BigDecimal("5000.00"), new BigDecimal("5000.00"), null, null);
         var unchanged = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
-                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), List.of(line));
+                LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), true, List.of(line));
         var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));

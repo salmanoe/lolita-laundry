@@ -75,8 +75,8 @@ export default function OrderDetailPage() {
     },
   })
 
-  // Order invoice is generated asynchronously after the delivery commits — fetch a fresh
-  // pre-signed URL on click and open it. A 404 means it isn't ready yet.
+  // Order invoice is available from RECEIVED onward: a live preview while the order is open,
+  // frozen once delivered. Fetch a fresh pre-signed URL on click and open it.
   const openInvoice = useMutation({
     mutationFn: async () =>
       apiFetch<OrderInvoice>(`/api/orders/${orderId}/invoice`, { token: await token() }),
@@ -116,7 +116,7 @@ export default function OrderDetailPage() {
                 Ubah Order
               </button>
             )}
-            {order.status === 'DELIVERED' && (
+            {order.status !== 'CANCELLED' && (
               <button
                 onClick={() => openInvoice.mutate()}
                 disabled={openInvoice.isPending}
@@ -155,7 +155,7 @@ export default function OrderDetailPage() {
         {openInvoice.error && (
           <p className="mt-2 text-sm text-red-500">
             {openInvoice.error instanceof ApiError && openInvoice.error.status === 404
-              ? 'Invoice belum siap. Coba lagi sebentar lagi.'
+              ? 'Invoice tidak tersedia untuk order ini.'
               : openInvoice.error instanceof ApiError
                 ? openInvoice.error.detail
                 : 'Gagal membuka invoice.'}
