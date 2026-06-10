@@ -4,16 +4,17 @@ import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import { BasketIcon, ChartIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, TowelsIcon, UsersIcon } from './NavIcons'
 
-// `ownerOnly` items are hidden from STAFF (the backend also enforces OWNER on /api/users).
+// `superAdminOnly` items (Item, Master Data, Pengguna) are visible only to SUPER_ADMIN — the
+// backend also enforces hasRole('SUPER_ADMIN') on those endpoints.
 const navItems = [
   { to: '/',        label: 'Dasbor', Icon: HomeIcon },
   { to: '/clients', label: 'Klien',  Icon: HotelIcon },
   { to: '/orders',  label: 'Order',  Icon: BasketIcon },
   { to: '/billing', label: 'Tagihan', Icon: InvoiceIcon },
   { to: '/reports', label: 'Laporan', Icon: ChartIcon },
-  { to: '/items',   label: 'Item',   Icon: TowelsIcon, ownerOnly: true },
-  { to: '/master-data', label: 'Master Data', Icon: SlidersIcon, ownerOnly: true },
-  { to: '/users',   label: 'Pengguna', Icon: UsersIcon, ownerOnly: true },
+  { to: '/items',   label: 'Item',   Icon: TowelsIcon, superAdminOnly: true },
+  { to: '/master-data', label: 'Master Data', Icon: SlidersIcon, superAdminOnly: true },
+  { to: '/users',   label: 'Pengguna', Icon: UsersIcon, superAdminOnly: true },
 ]
 
 function initials(name?: string) {
@@ -44,8 +45,8 @@ export default function Layout() {
     return <Navigate to="/deliveries" replace />
   }
 
-  const isOwner = meQ.data?.role === 'OWNER'
-  const visibleNav = navItems.filter((item) => !item.ownerOnly || isOwner)
+  const isSuperAdmin = meQ.data?.role === 'SUPER_ADMIN'
+  const visibleNav = navItems.filter((item) => !item.superAdminOnly || isSuperAdmin)
 
   return (
     <div className="flex h-screen bg-gray-50">

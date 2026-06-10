@@ -1,6 +1,6 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import AuthGuard from './auth/AuthGuard'
-import RequireOwner from './auth/RequireOwner'
+import RequireSuperAdmin from './auth/RequireSuperAdmin'
 import Layout from './components/Layout'
 import DriverLayout from './components/DriverLayout'
 import DeliveriesPage from './pages/DeliveriesPage'
@@ -43,14 +43,14 @@ const router = createBrowserRouter([
       { index: true,         element: <DashboardPage /> },
       { path: 'clients',     element: <ClientsPage /> },
       { path: 'clients/:id', element: <ClientDetailPage /> },
-      { path: 'items',       element: <RequireOwner><ItemsPage /></RequireOwner> },
-      { path: 'master-data', element: <RequireOwner><MasterDataPage /></RequireOwner> },
+      { path: 'items',       element: <RequireSuperAdmin><ItemsPage /></RequireSuperAdmin> },
+      { path: 'master-data', element: <RequireSuperAdmin><MasterDataPage /></RequireSuperAdmin> },
       { path: 'orders',      element: <OrdersPage /> },
       { path: 'orders/:id',  element: <OrderDetailPage /> },
       { path: 'billing',     element: <BillingPage /> },
       { path: 'billing/:id', element: <BillingDetailPage /> },
       { path: 'reports',     element: <ReportsPage /> },
-      { path: 'users',       element: <RequireOwner><UsersPage /></RequireOwner> },
+      { path: 'users',       element: <RequireSuperAdmin><UsersPage /></RequireSuperAdmin> },
     ],
   },
   {

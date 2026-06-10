@@ -25,7 +25,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Orchestration rules of UserService that aren't visible in the domain object:
- * duplicate-sub rejection on create, and the "last active OWNER" lock-out guard on
+ * duplicate-sub rejection on create, and the "last active SUPER_ADMIN" lock-out guard on
  * deactivate / role-demote. Pure Mockito — no Spring context.
  */
 @ExtendWith(MockitoExtension.class)
@@ -64,22 +64,22 @@ class UserServiceTest {
     }
 
     @Test
-    void setActive_rejectsDeactivatingLastActiveOwner() {
-        var owner = user(1, Role.OWNER, true);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
-        when(userRepository.findAll()).thenReturn(List.of(owner, user(2, Role.STAFF, true)));
+    void setActive_rejectsDeactivatingLastActiveSuperAdmin() {
+        var admin = user(1, Role.SUPER_ADMIN, true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findAll()).thenReturn(List.of(admin, user(2, Role.OWNER, true)));
 
         assertThatThrownBy(() -> service.setActive(1L, false))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("OWNER aktif terakhir");
+                .hasMessageContaining("SUPER_ADMIN aktif terakhir");
         verify(userRepository, never()).save(any());
     }
 
     @Test
-    void setActive_allowsDeactivatingOwnerWhenAnotherActiveOwnerExists() {
-        var owner = user(1, Role.OWNER, true);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
-        when(userRepository.findAll()).thenReturn(List.of(owner, user(2, Role.OWNER, true)));
+    void setActive_allowsDeactivatingSuperAdminWhenAnotherActiveSuperAdminExists() {
+        var admin = user(1, Role.SUPER_ADMIN, true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findAll()).thenReturn(List.of(admin, user(2, Role.SUPER_ADMIN, true)));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.setActive(1L, false);
@@ -88,14 +88,26 @@ class UserServiceTest {
     }
 
     @Test
-    void update_rejectsDemotingLastActiveOwner() {
+    void setActive_allowsDeactivatingLastOwner() {
+        // OWNER is no longer the administrative role — only SUPER_ADMIN is guarded.
         var owner = user(1, Role.OWNER, true);
         when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
-        when(userRepository.findAll()).thenReturn(List.of(owner));
+        when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> service.update(new UpdateUserCommand(1L, "Owner", Role.STAFF)))
+        var result = service.setActive(1L, false);
+
+        assertThat(result.isActive()).isFalse();
+    }
+
+    @Test
+    void update_rejectsDemotingLastActiveSuperAdmin() {
+        var admin = user(1, Role.SUPER_ADMIN, true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
+        when(userRepository.findAll()).thenReturn(List.of(admin));
+
+        assertThatThrownBy(() -> service.update(new UpdateUserCommand(1L, "Admin", Role.OWNER)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("OWNER aktif terakhir");
+                .hasMessageContaining("SUPER_ADMIN aktif terakhir");
         verify(userRepository, never()).save(any());
     }
 

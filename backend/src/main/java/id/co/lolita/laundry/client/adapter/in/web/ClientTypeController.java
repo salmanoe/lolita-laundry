@@ -21,8 +21,10 @@ class ClientTypeController {
 
     private final ClientTypeUseCase clientTypes;
 
+    // Reference-data lists stay readable by OWNER/STAFF (they resolve type labels for clients);
+    // SUPER_ADMIN reads them on the Master Data screen. Mutations are SUPER_ADMIN-only.
     @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     List<LookupResponse> list() {
         return clientTypes.list().stream().map(LookupResponse::from).toList();
     }
@@ -31,21 +33,21 @@ class ClientTypeController {
      * Active client types only, for selection dropdowns.
      */
     @GetMapping("/options")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     List<LookupResponse> options() {
         return clientTypes.listActive().stream().map(LookupResponse::from).toList();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     LookupResponse create(@Valid @RequestBody CreateLookupRequest request) {
         return LookupResponse.from(clientTypes.create(
                 new CreateLookupCommand(request.code(), request.displayName(), request.sortOrder())));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     LookupResponse update(@PathVariable Long id, @Valid @RequestBody UpdateLookupRequest request) {
         return LookupResponse.from(clientTypes.update(
                 new UpdateLookupCommand(id, request.displayName(), request.sortOrder(), request.active())));

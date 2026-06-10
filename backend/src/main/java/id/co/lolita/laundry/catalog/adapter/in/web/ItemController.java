@@ -25,10 +25,10 @@ class ItemController {
     private final GetItemsUseCase getItems;
     private final ManageItemUseCase manageItem;
 
-    // Item management screen is OWNER-only (the paginated list backs ItemsPage). STAFF still
-    // resolve item names/units through /options for orders and price-setting.
+    // Item management screen is SUPER_ADMIN-only (the paginated list backs ItemsPage). OWNER/STAFF
+    // still resolve item names/units through /options for orders and price-setting.
     @GetMapping
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     Page<ItemResponse> listItems(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -42,21 +42,21 @@ class ItemController {
      * Unpaged list of active items for selection dropdowns (e.g. setting a client price).
      */
     @GetMapping("/options")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     List<ItemResponse> listItemOptions() {
         return getItems.getActiveItems().stream().map(ItemResponse::from).toList();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     ItemResponse createItem(@Valid @RequestBody CreateItemRequest request) {
         var command = new CreateItemCommand(request.name(), request.unitId());
         return ItemResponse.from(manageItem.createItem(command));
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     ItemResponse updateItem(@PathVariable Long id, @Valid @RequestBody UpdateItemRequest request) {
         var command = new UpdateItemCommand(id, request.name(), request.unitId(), request.active());
         return ItemResponse.from(manageItem.updateItem(command));

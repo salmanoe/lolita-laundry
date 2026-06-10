@@ -16,14 +16,14 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * Owner-only user administration (Phase 5). STAFF and DRIVER have no access — managing who
- * can log in is an OWNER privilege. The Auth0 account is created separately in the Auth0
+ * SUPER_ADMIN-only user administration. OWNER, STAFF and DRIVER have no access — managing who
+ * can log in is a SUPER_ADMIN privilege. The Auth0 account is created separately in the Auth0
  * dashboard; this screen registers/maintains the matching local {@code users} row.
  */
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('OWNER')")
+@PreAuthorize("hasRole('SUPER_ADMIN')")
 class UserAdminController {
 
     private final ManageUserUseCase users;

@@ -3,14 +3,17 @@
 // labels from the lookup lists (see lib/lookups.ts), not from here.
 import type { BillingMode, BillingStatus, OrderStatus, Role } from '../types/api'
 
-// User roles — Indonesian label + badge color. OWNER/STAFF run the admin app, DRIVER the delivery app.
+// User roles — Indonesian label + badge color. SUPER_ADMIN runs system config, OWNER views
+// analytics, STAFF runs the admin app day-to-day, DRIVER the delivery app.
 export const roleLabel: Record<Role, string> = {
+  SUPER_ADMIN: 'Admin Super',
   OWNER: 'Pemilik',
   STAFF: 'Staf',
   DRIVER: 'Pengantar',
 }
 
 export const roleBadge: Record<Role, string> = {
+  SUPER_ADMIN: 'bg-rose-100 text-rose-700',
   OWNER: 'bg-violet-100 text-violet-700',
   STAFF: 'bg-blue-100 text-blue-700',
   DRIVER: 'bg-amber-100 text-amber-700',

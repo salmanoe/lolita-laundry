@@ -18,7 +18,7 @@ interface Props {
   entry?: User // undefined → create mode
 }
 
-const ROLES: Role[] = ['OWNER', 'STAFF', 'DRIVER']
+const ROLES: Role[] = ['SUPER_ADMIN', 'OWNER', 'STAFF', 'DRIVER']
 
 const field =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'

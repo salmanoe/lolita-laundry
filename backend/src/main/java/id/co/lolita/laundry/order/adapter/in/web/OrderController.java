@@ -27,12 +27,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Authenticated order operations for Lolita staff (OWNER / STAFF).
+ * Authenticated order operations for Lolita staff (OWNER / STAFF / SUPER_ADMIN).
  */
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+@PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
 class OrderController {
 
     private final GetOrdersUseCase ordersQuery;

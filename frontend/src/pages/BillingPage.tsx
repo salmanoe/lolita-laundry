@@ -17,7 +17,8 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1)
 export default function BillingPage() {
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
-  const isOwner = useMe().data?.role === 'OWNER'
+  const role = useMe().data?.role
+  const canRegenerate = role === 'OWNER' || role === 'SUPER_ADMIN'
   const [clientId, setClientId] = useState<number | ''>('')
   const [year, setYear] = useState<number | ''>('')
   const [month, setMonth] = useState<number | ''>('')
@@ -30,7 +31,7 @@ export default function BillingPage() {
       return next
     })
 
-  // OWNER-only bulk refresh: re-render every billing & invoice PDF to the current template
+  // OWNER/SUPER_ADMIN bulk refresh: re-render every billing & invoice PDF to the current template
   // (layout-only — amounts unchanged). For applying a finalized PDF design before go-live.
   const regenAll = useMutation({
     mutationFn: async () =>
@@ -83,7 +84,7 @@ export default function BillingPage() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-gray-800">Tagihan Bulanan</h1>
         <div className="flex gap-2">
-          {isOwner && (
+          {canRegenerate && (
             <button
               onClick={() => {
                 if (window.confirm('Perbarui semua PDF tagihan & invoice ke format terbaru? Nominal tidak berubah.')) {

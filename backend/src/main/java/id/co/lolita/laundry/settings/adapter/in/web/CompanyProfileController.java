@@ -15,8 +15,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * OWNER-only company-profile editor. The profile (letterhead + bank details) appears on every
- * invoice and monthly-billing PDF, so it is read by STAFF too but only the OWNER may change it.
+ * SUPER_ADMIN-only company-profile editor. The profile (letterhead + bank details) appears on every
+ * invoice and monthly-billing PDF; PDFs read it through the settings::api gateway, so locking the
+ * REST endpoint to SUPER_ADMIN does not affect billing rendering.
  */
 @RestController
 @RequestMapping("/api/company-profile")
@@ -26,16 +27,16 @@ class CompanyProfileController {
     private final GetCompanyProfileUseCase getProfile;
     private final UpdateCompanyProfileUseCase updateProfile;
 
-    // Master Data screen is OWNER-only. PDFs read the profile via the settings::api gateway,
-    // not this endpoint, so locking the REST read to OWNER does not affect billing rendering.
+    // Master Data screen is SUPER_ADMIN-only. PDFs read the profile via the settings::api gateway,
+    // not this endpoint, so locking the REST read does not affect billing rendering.
     @GetMapping
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     CompanyProfileResponse get() {
         return CompanyProfileResponse.from(getProfile.get());
     }
 
     @PutMapping
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     CompanyProfileResponse update(@Valid @RequestBody UpdateCompanyProfileRequest request) {
         return CompanyProfileResponse.from(updateProfile.update(new UpdateCompanyProfileCommand(
                 request.companyName(), request.address(), request.phone(), request.bankBeneficiary(),

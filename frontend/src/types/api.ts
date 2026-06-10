@@ -1,8 +1,12 @@
 // ── Shared API response types ─────────────────────────────────────────────────
 // These mirror the backend DTOs. Keep in sync with the Java record definitions.
 
-/** Lolita user roles. Hotel staff are not users (they use tokenized public links). */
-export type Role = 'OWNER' | 'STAFF' | 'DRIVER'
+/**
+ * Lolita user roles. Hotel staff are not users (they use tokenized public links).
+ * SUPER_ADMIN is the top-level administrator (all dashboards + system config + adjustments);
+ * OWNER is a business/analytics viewer; STAFF runs day-to-day operations; DRIVER the delivery app.
+ */
+export type Role = 'SUPER_ADMIN' | 'OWNER' | 'STAFF' | 'DRIVER'
 
 /** Current authenticated user — mirrors MeResponse. Drives role-aware routing. */
 export interface Me {
@@ -30,7 +34,7 @@ export interface Page<T> {
   totalPages: number
 }
 
-/** Company letterhead + bank details printed on PDFs — singleton, edited in Master Data (OWNER only). */
+/** Company letterhead + bank details printed on PDFs — singleton, edited in Master Data (SUPER_ADMIN only). */
 export interface CompanyProfile {
   companyName:     string
   address:         string
