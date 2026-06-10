@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Per-order invoice lookup. Mapped under {@code /api/orders/{id}/invoice} (the documented
  * path) but owned by the billing module — the path string creates no module dependency on
- * order. Read-only: invoices are generated automatically at delivery.
+ * order. Available from RECEIVED onward: a live preview while the order is open, frozen once
+ * delivered.
  */
 @RestController
 @RequiredArgsConstructor
@@ -24,9 +25,10 @@ class OrderInvoiceController {
 
     @GetMapping("/api/orders/{orderId}/invoice")
     OrderInvoiceResponse get(@PathVariable Long orderId) {
-        // Lazily renders the PDF if the invoice has none yet (e.g. backfilled invoices),
-        // then returns metadata + a short-lived pre-signed URL. 404 if the order has no invoice.
-        var invoice = invoiceWriter.ensurePdfForOrder(orderId);
+        // Creates/refreshes the invoice on demand (live preview while open, frozen once
+        // delivered), then returns metadata + a short-lived pre-signed URL. 404 for an unknown
+        // or canceled order.
+        var invoice = invoiceWriter.prepareInvoiceForOrder(orderId);
         var pdfUrl = billingQuery.getInvoicePdfUrlForOrder(orderId);
         return OrderInvoiceResponse.from(invoice, pdfUrl);
     }

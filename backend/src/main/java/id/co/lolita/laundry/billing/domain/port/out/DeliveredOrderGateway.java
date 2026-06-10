@@ -19,16 +19,20 @@ public interface DeliveredOrderGateway {
 
     record DeliveredOrder(Long orderId, String orderNumber, Long clientId,
                           LocalDate orderDate, BigDecimal pricingMultiplier,
-                          BigDecimal total, List<InvoiceLine> lines) {
+                          BigDecimal total, boolean delivered, List<InvoiceLine> lines) {
     }
 
     Optional<DeliveredOrder> findDeliveredOrder(Long orderId);
 
     List<DeliveredOrder> findDeliveredOrders(Long clientId, int year, int month);
 
-    /** A single billable (not cancelled) order, or empty if unknown/cancelled. */
+    /**
+     * A single billable (not canceled) order, or empty if unknown/canceled.
+     */
     Optional<DeliveredOrder> findBillableOrder(Long orderId);
 
-    /** Every billable (not cancelled) order for a client in the given month, oldest first. */
+    /**
+     * Every billable (not canceled) order for a client in the given month, oldest first.
+     */
     List<DeliveredOrder> findBillableOrders(Long clientId, int year, int month);
 }

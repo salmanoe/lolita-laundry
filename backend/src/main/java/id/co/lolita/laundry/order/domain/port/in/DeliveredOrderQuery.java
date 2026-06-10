@@ -29,11 +29,13 @@ public interface DeliveredOrderQuery {
      * Everything billing needs about one delivered order. An order may span several departments
      * (each line carries its own); the monthly billing splits it per department.
      *
-     * @param total sum of line subtotals (already includes the pricing multiplier)
+     * @param total     sum of line subtotals (already includes the pricing multiplier)
+     * @param delivered whether the order is DELIVERED — the per-order invoice freezes once true,
+     *                  and re-renders as a live preview while false
      */
     record DeliveredOrderDetail(Long orderId, String orderNumber, Long clientId,
                                 LocalDate orderDate, BigDecimal pricingMultiplier,
-                                BigDecimal total, List<DeliveredLine> lines) {
+                                BigDecimal total, boolean delivered, List<DeliveredLine> lines) {
     }
 
     /**

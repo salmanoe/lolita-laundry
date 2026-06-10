@@ -3,21 +3,21 @@ package id.co.lolita.laundry.billing.domain.port.in;
 import id.co.lolita.laundry.billing.domain.OrderInvoice;
 
 /**
- * Generates the per-order invoice for a delivered order. Invoked by the billing module's
- * event adapter in response to {@code OrderDeliveredEvent}. Idempotent — a second call for
- * an order that already has an invoice is a no-op, so event redelivery is safe.
+ * Generates the per-order invoice. The {@code OrderDeliveredEvent} listener renders the frozen
+ * invoice at delivery; staff can also view a live preview from RECEIVED onward. Idempotent —
+ * one invoice row per order, so event redelivery and repeated views never duplicate it.
  */
 public interface CreateOrderInvoiceUseCase {
 
     void createForDeliveredOrder(Long orderId);
 
     /**
-     * Returns the order's invoice, lazily rendering and storing its PDF if it has none yet.
-     * Normal invoices get their PDF at delivery; invoices created without one (e.g. a SQL
-     * backfill of legacy delivered orders) are healed on first view. Throws if the order has
-     * no invoice at all. Idempotent: a no-op once the PDF exists.
+     * Returns the order's invoice for viewing, creating or refreshing it on demand. While the
+     * order is still open (RECEIVED/PROCESSING/DONE) this re-renders a live preview reflecting
+     * the latest order/company state; once the order is DELIVERED the invoice is frozen and
+     * returned as-is. Throws {@code NotFoundException} for an unknown or canceled order.
      */
-    OrderInvoice ensurePdfForOrder(Long orderId);
+    OrderInvoice prepareInvoiceForOrder(Long orderId);
 
     /**
      * Re-renders and re-stores the PDF for every existing invoice (layout-only — amounts and
