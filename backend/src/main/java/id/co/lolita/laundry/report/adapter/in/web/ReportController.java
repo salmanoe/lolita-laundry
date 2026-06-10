@@ -29,7 +29,7 @@ import java.time.YearMonth;
 @RestController
 @RequestMapping("/api/reports")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+@PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
 class ReportController {
 
     private final GetReportsUseCase reports;

@@ -14,26 +14,29 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 /**
- * Dashboard endpoints. The operational {@code /summary} is OWNER/STAFF; the business-analytics
- * {@code /analytics} is OWNER-only. The driver app has no access to either.
+ * Dashboard endpoints. The operational {@code /summary} is STAFF/SUPER_ADMIN; the business-analytics
+ * {@code /analytics} is OWNER/SUPER_ADMIN. SUPER_ADMIN sees both; OWNER sees only analytics and STAFF
+ * only the operational summary. The driver app has no access to either.
  */
 @RestController
 @RequestMapping("/api/dashboard")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+@PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
 class DashboardController {
 
     private final GetDashboardUseCase dashboard;
 
+    // Operational summary — STAFF + SUPER_ADMIN. Method-level @PreAuthorize overrides the class
+    // rule, so OWNER (analytics-only) gets 403 here.
     @GetMapping("/summary")
+    @PreAuthorize("hasAnyRole('STAFF', 'SUPER_ADMIN')")
     DashboardSummaryResponse summary() {
         return DashboardSummaryResponse.from(dashboard.dashboard());
     }
 
-    // Owner-grade business analytics over a date range. Method-level @PreAuthorize overrides the
-    // class-level OWNER/STAFF — STAFF get 403.
+    // Business analytics over a date range — OWNER + SUPER_ADMIN. STAFF get 403.
     @GetMapping("/analytics")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     DashboardAnalyticsResponse analytics(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {

@@ -50,9 +50,9 @@ class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, Mana
     @Transactional
     public User update(UpdateUserCommand command) {
         var user = load(command.id());
-        // Demoting the only active OWNER would leave the system without an administrator.
-        if (user.getRole() == Role.OWNER && command.role() != Role.OWNER && isLastActiveOwner(user)) {
-            throw new IllegalArgumentException("Tidak dapat mengubah peran OWNER aktif terakhir");
+        // Demoting the only active SUPER_ADMIN would lock everyone out of user administration.
+        if (user.getRole() == Role.SUPER_ADMIN && command.role() != Role.SUPER_ADMIN && isLastActiveSuperAdmin(user)) {
+            throw new IllegalArgumentException("Tidak dapat mengubah peran SUPER_ADMIN aktif terakhir");
         }
         user.rename(command.fullName());
         user.changeRole(command.role());
@@ -63,8 +63,8 @@ class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, Mana
     @Transactional
     public User setActive(Long id, boolean active) {
         var user = load(id);
-        if (!active && user.getRole() == Role.OWNER && isLastActiveOwner(user)) {
-            throw new IllegalArgumentException("Tidak dapat menonaktifkan OWNER aktif terakhir");
+        if (!active && user.getRole() == Role.SUPER_ADMIN && isLastActiveSuperAdmin(user)) {
+            throw new IllegalArgumentException("Tidak dapat menonaktifkan SUPER_ADMIN aktif terakhir");
         }
         if (active) {
             user.activate();
@@ -80,11 +80,11 @@ class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, Mana
     }
 
     /**
-     * True when {@code target} is the only currently-active OWNER.
+     * True when {@code target} is the only currently-active SUPER_ADMIN.
      */
-    private boolean isLastActiveOwner(User target) {
+    private boolean isLastActiveSuperAdmin(User target) {
         return userRepository.findAll().stream()
-                .filter(u -> u.getRole() == Role.OWNER && u.isActive())
+                .filter(u -> u.getRole() == Role.SUPER_ADMIN && u.isActive())
                 .allMatch(u -> u.getId().equals(target.getId()));
     }
 }

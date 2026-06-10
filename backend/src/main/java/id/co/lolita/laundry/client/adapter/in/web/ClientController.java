@@ -30,7 +30,7 @@ class ClientController {
     // ── Clients ──
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     Page<ClientResponse> listClients(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -41,14 +41,14 @@ class ClientController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     ClientResponse getClient(@PathVariable Long id) {
         return ClientResponse.from(clientQuery.getClientById(id));
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     ClientResponse createClient(@Valid @RequestBody CreateClientRequest request) {
         var command = new CreateClientCommand(
                 request.name(), request.clientCode(), request.clientTypeId(), request.billingMode(),
@@ -58,7 +58,7 @@ class ClientController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     ClientResponse updateClient(@PathVariable Long id, @Valid @RequestBody UpdateClientRequest request) {
         var command = new UpdateClientCommand(
                 id, request.name(), request.clientTypeId(), request.billingMode(),
@@ -68,7 +68,7 @@ class ClientController {
     }
 
     @PostMapping("/{id}/rotate-token")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     ClientResponse rotateToken(@PathVariable Long id) {
         return ClientResponse.from(manageClient.rotateToken(id));
     }
@@ -76,7 +76,7 @@ class ClientController {
     // ── Departments ──
 
     @GetMapping("/{clientId}/departments")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     List<DepartmentResponse> listDepartments(@PathVariable Long clientId) {
         return manageDepartment.getDepartmentsByClient(clientId).stream()
                 .map(DepartmentResponse::from).toList();
@@ -84,7 +84,7 @@ class ClientController {
 
     @PostMapping("/{clientId}/departments")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     DepartmentResponse createDepartment(@PathVariable Long clientId,
                                         @Valid @RequestBody DepartmentRequest request) {
         return DepartmentResponse.from(
@@ -93,7 +93,7 @@ class ClientController {
     }
 
     @PutMapping("/{clientId}/departments/{deptId}")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     DepartmentResponse updateDepartment(@PathVariable Long clientId, @PathVariable Long deptId,
                                         @Valid @RequestBody DepartmentRequest request) {
         return DepartmentResponse.from(
@@ -104,7 +104,7 @@ class ClientController {
     // ── Price list ──
 
     @GetMapping("/{clientId}/prices")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
     List<PriceListResponse> getPrices(@PathVariable Long clientId) {
         return managePriceList.getCurrentPrices(clientId).stream()
                 .map(PriceListResponse::from).toList();
@@ -112,7 +112,7 @@ class ClientController {
 
     @PostMapping("/{clientId}/prices")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     PriceListResponse setPrice(@PathVariable Long clientId, @Valid @RequestBody SetPriceRequest request) {
         var command = new SetPriceCommand(clientId, request.itemId(), request.pricePerUnit(),
                 request.effectiveDate(), request.departmentId());

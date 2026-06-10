@@ -26,7 +26,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/billing")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+@PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
 class BillingController {
 
     private final GenerateMonthlyBillingUseCase generateBilling;
@@ -72,10 +72,10 @@ class BillingController {
 
     /**
      * Bulk-refresh every billing and order-invoice PDF to the current template (layout-only —
-     * no amounts change). OWNER only; intended for applying a finalized PDF design before go-live.
+     * no amounts change). OWNER/SUPER_ADMIN; intended for applying a finalized PDF design before go-live.
      */
     @PostMapping("/regenerate-all-pdfs")
-    @PreAuthorize("hasRole('OWNER')")
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
     RegeneratePdfsResponse regenerateAllPdfs() {
         int billings = generateBilling.regenerateAllPdfs();
         int invoices = orderInvoices.regenerateAllPdfs();

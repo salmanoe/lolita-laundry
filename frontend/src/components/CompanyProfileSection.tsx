@@ -11,14 +11,14 @@ const label = 'block text-xs font-medium text-gray-600 mb-1'
 
 /**
  * The company profile (letterhead + bank-transfer details) printed on every invoice and monthly
- * billing PDF. A single editable record. OWNER may edit; STAFF sees it read-only. Changing it
- * updates DRAFT billings on the next render but never rewrites an already-issued/paid document
- * (the backend freezes a snapshot at issue time).
+ * billing PDF. A single editable record. SUPER_ADMIN may edit (this lives on the SUPER_ADMIN-only
+ * Master Data screen). Changing it updates DRAFT billings on the next render but never rewrites an
+ * already-issued/paid document (the backend freezes a snapshot at issue time).
  */
 export default function CompanyProfileSection() {
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
-  const isOwner = useMe().data?.role === 'OWNER'
+  const canEdit = useMe().data?.role === 'SUPER_ADMIN'
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['company-profile'],
@@ -52,7 +52,7 @@ export default function CompanyProfileSection() {
         <h2 className="text-base font-semibold text-gray-800">Profil Perusahaan</h2>
         <p className="text-xs text-gray-500">
           Kop surat &amp; rekening yang tampil pada PDF invoice dan tagihan.
-          {!isOwner && ' Hanya pemilik (OWNER) yang dapat mengubah.'}
+          {!canEdit && ' Hanya Admin Super yang dapat mengubah.'}
         </p>
       </div>
 
@@ -67,17 +67,17 @@ export default function CompanyProfileSection() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
               <label className={label}>Nama Perusahaan</label>
-              <input className={field} readOnly={!isOwner} {...register('companyName', { required: true })} />
+              <input className={field} readOnly={!canEdit} {...register('companyName', { required: true })} />
               {errors.companyName && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
             </div>
             <div className="sm:col-span-2">
               <label className={label}>Alamat</label>
-              <input className={field} readOnly={!isOwner} {...register('address', { required: true })} />
+              <input className={field} readOnly={!canEdit} {...register('address', { required: true })} />
               {errors.address && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
             </div>
             <div>
               <label className={label}>No. Telepon / HP</label>
-              <input className={field} readOnly={!isOwner} {...register('phone', { required: true })} />
+              <input className={field} readOnly={!canEdit} {...register('phone', { required: true })} />
               {errors.phone && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
             </div>
           </div>
@@ -89,22 +89,22 @@ export default function CompanyProfileSection() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className={label}>Penerima</label>
-                <input className={field} readOnly={!isOwner} {...register('bankBeneficiary', { required: true })} />
+                <input className={field} readOnly={!canEdit} {...register('bankBeneficiary', { required: true })} />
                 {errors.bankBeneficiary && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
               </div>
               <div>
                 <label className={label}>Bank</label>
-                <input className={field} readOnly={!isOwner} {...register('bankName', { required: true })} />
+                <input className={field} readOnly={!canEdit} {...register('bankName', { required: true })} />
                 {errors.bankName && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
               </div>
               <div>
                 <label className={label}>No. Rekening</label>
-                <input className={field} readOnly={!isOwner} {...register('bankAccount', { required: true })} />
+                <input className={field} readOnly={!canEdit} {...register('bankAccount', { required: true })} />
                 {errors.bankAccount && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
               </div>
               <div>
                 <label className={label}>Nama Pemilik Rekening</label>
-                <input className={field} readOnly={!isOwner} {...register('bankHolder', { required: true })} />
+                <input className={field} readOnly={!canEdit} {...register('bankHolder', { required: true })} />
                 {errors.bankHolder && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
               </div>
             </div>
@@ -116,7 +116,7 @@ export default function CompanyProfileSection() {
             </p>
           )}
 
-          {isOwner && (
+          {canEdit && (
             <div className="flex items-center justify-end gap-3">
               {mutation.isSuccess && !isDirty && (
                 <span className="text-sm text-green-600">Tersimpan.</span>
