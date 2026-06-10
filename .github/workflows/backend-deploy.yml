@@ -1,0 +1,66 @@
+name: Backend Deploy
+
+# Build the Spring Boot JAR and deploy it to the Sumopod VPS on merge to main.
+# Frontend deploys itself (Vercel auto-deploys on push) — this workflow is backend-only.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+  workflow_dispatch: {}   # allow manual "Run workflow" from the Actions tab
+
+# Never let two deploys race the same box.
+concurrency:
+  group: backend-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      - name: Build bootJar
+        working-directory: backend
+        run: ./gradlew bootJar --no-daemon
+
+      # Stage under a temp name so we can swap atomically on the VPS — overwriting a
+      # jar the running JVM still lazy-loads classes from can corrupt the live process.
+      - name: Stage artifact
+        run: cp backend/build/libs/backend-*.jar app.jar.new
+
+      - name: Copy artifact to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: app.jar.new
+          target: /home/ubuntu/lolita-laundry/
+
+      - name: Swap in & restart
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/lolita-laundry
+            mv app.jar.new app.jar
+            sudo systemctl restart lolita-laundry
+            sleep 5
+            if systemctl is-active --quiet lolita-laundry; then
+              echo "✅ lolita-laundry is active"
+            else
+              echo "❌ service failed to start — recent logs:"
+              sudo journalctl -u lolita-laundry -n 40 --no-pager
+              exit 1
+            fi

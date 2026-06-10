@@ -17,7 +17,7 @@ businesses.
 | Database     | PostgreSQL (Neon.tech)                                       |
 | File storage | Cloudflare R2                                                |
 | Frontend     | React 19 + Vite → Vercel                                     |
-| Hosting      | Oracle Cloud Always Free ARM                                 |
+| Hosting      | Sumopod VPS (Ubuntu 24.04, x86_64)                           |
 
 ---
 
