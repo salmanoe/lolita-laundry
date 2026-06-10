@@ -1,5 +1,10 @@
 # ── Production profile ──
-# Oracle Cloud ARM VM — set via environment variables, never hardcode secrets
+# Sumopod Ubuntu VPS — set secrets via environment variables, never hardcode them
+
+# Behind Caddy (TLS terminates at the proxy, app speaks plain HTTP on :8080).
+# Honour X-Forwarded-Proto/Host so Spring builds correct https:// absolute URLs.
+server:
+  forward-headers-strategy: framework
 
 spring:
   datasource:
@@ -22,7 +27,7 @@ spring.security.oauth2.resourceserver.jwt:
 # Cloudflare R2
 app:
   storage:
-    endpoint: https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
+    endpoint: https://2a48f3351e414c179868bf5ef6ca0a50.r2.cloudflarestorage.com
     access-key: ${R2_ACCESS_KEY}
     secret-key: ${R2_SECRET_KEY}
     bucket: lolita-laundry

@@ -2,4 +2,4 @@ spring:
   application:
     name: lolita-laundry
   profiles:
-    active: dev   # override to 'prod' on Oracle Cloud VM
+    active: dev   # override to 'prod' on the Sumopod VPS
