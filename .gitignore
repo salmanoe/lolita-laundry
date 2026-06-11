@@ -10,6 +10,10 @@ auth0-domain.txt
 application-local.yaml
 docker-compose.override.yml
 
+# Prod data seed — commercially sensitive per-client prices. Generated locally by
+# backend/scripts/gen_prod_price_seed.py and SCP'd to the VPS PROD_SEED_DIR; never committed.
+backend/prod-seed/
+
 # ── OS ──
 .DS_Store
 Thumbs.db

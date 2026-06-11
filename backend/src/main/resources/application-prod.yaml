@@ -2,7 +2,7 @@
 # Sumopod Ubuntu VPS — set secrets via environment variables, never hardcode them
 
 # Behind Caddy (TLS terminates at the proxy, app speaks plain HTTP on :8080).
-# Honour X-Forwarded-Proto/Host so Spring builds correct https:// absolute URLs.
+# Honor X-Forwarded-Proto/Host so Spring builds correct https:// absolute URLs.
 server:
   forward-headers-strategy: framework
 
@@ -17,6 +17,13 @@ spring:
       ddl-auto: validate
   flyway:
     enabled: true
+    # Adds the prod-only data seed (R__prod_price_seed.sql: item catalogue + per-client unit prices)
+    # on top of the real migrations. The seed file is commercially sensitive and is NOT committed —
+    # it is generated locally and SCP'd onto the VPS into PROD_SEED_DIR, then read from the
+    # filesystem (not the JAR classpath). Missing dir is ignored (fail-on-missing-locations=false),
+    # so the app still boots if the file hasn't been copied yet. Dev uses classpath:db/seed; tests
+    # use neither — this filesystem location only applies under the prod profile.
+    locations: classpath:db/migration,filesystem:${PROD_SEED_DIR:/opt/lolita-laundry/prod-seed}
 
 spring.security.oauth2.resourceserver.jwt:
   issuer-uri: https://dev-orcxwn2q35kltpyb.us.auth0.com/
