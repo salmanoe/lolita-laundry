@@ -13,10 +13,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Require head branch to be develop
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         run: |
-          echo "PR head branch: ${{ github.head_ref }}"
-          if [ "${{ github.head_ref }}" != "develop" ]; then
-            echo "::error::Only 'develop' may be merged into 'main'. This PR is from '${{ github.head_ref }}'."
+          echo "PR head branch: $HEAD_REF"
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::Only 'develop' may be merged into 'main'. This PR is from '$HEAD_REF'."
             exit 1
           fi
           echo "OK: PR is from develop."
