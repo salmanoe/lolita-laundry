@@ -61,4 +61,6 @@ See [Development Setup](../../wiki/Development-Setup) for Auth0 configuration an
 
 ## License
 
-MIT © Salman Manoe
+**Proprietary — All Rights Reserved.** Copyright © 2026 Salman Manoe, exclusively licensed to
+Lolita Laundry. This is not open-source software; see [LICENSE](LICENSE). No use, copying,
+modification, or distribution is permitted without written permission.
