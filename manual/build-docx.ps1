@@ -35,7 +35,8 @@ pandoc $tmp -o $out `
   --toc --toc-depth=2 `
   --resource-path=. `
   --reference-doc="reference.docx" `
-  --metadata title="Panduan Penggunaan Lolita Laundry"
+  --metadata title="Panduan Penggunaan Lolita Laundry" `
+  --metadata toc-title="Daftar Isi"
 
 Remove-Item $tmp -ErrorAction SilentlyContinue
 

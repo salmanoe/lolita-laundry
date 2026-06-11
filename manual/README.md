@@ -1,15 +1,18 @@
-# Buku Panduan Lolita Laundry (PDF untuk end-user)
+# Buku Panduan Lolita Laundry (untuk end-user)
 
-Satu PDF berbahasa Indonesia untuk tiga audiens: **Staf Hotel/Klien**, **Driver**, **Staf Lolita**.
+Satu dokumen berbahasa Indonesia untuk tiga audiens: **Staf Hotel/Klien**, **Driver**, **Staf Lolita**.
+Tersedia dua format: **PDF** (cetak, brand penuh) dan **DOCX** (Word, mudah diedit).
 
 ## Hasil
 
-`Panduan-Lolita-Laundry.pdf` — dibangun dari `manual-lolita-laundry.md` + `style.css`.
+- `Panduan-Lolita-Laundry.pdf` — dari `manual-lolita-laundry.md` + `style.css`.
+- `Panduan-Lolita-Laundry.docx` — dari naskah yang sama + reference doc berbrand.
 
 ## Prasyarat (sekali pasang)
 
 - **Pandoc** — `winget install JohnMacFarlane.Pandoc`
 - **wkhtmltopdf** — `winget install wkhtmltopdf.wkhtmltox` (mesin PDF; tanpa LaTeX)
+- **Python + python-docx** — `python -m pip install python-docx` (hanya untuk DOCX berbrand)
 
 ## Membangun PDF
 
@@ -17,7 +20,18 @@ Satu PDF berbahasa Indonesia untuk tiga audiens: **Staf Hotel/Klien**, **Driver*
 pwsh manual\build.ps1
 ```
 
-Mengeksekusi Pandoc → wkhtmltopdf dengan `style.css`, daftar isi, dan nomor halaman.
+Pandoc → wkhtmltopdf (`cover` → `toc` → isi) dengan `style.css`, daftar isi, dan nomor halaman.
+
+## Membangun DOCX
+
+```powershell
+pwsh manual\build-docx.ps1
+```
+
+`make_reference.py` membuat `reference.docx` berbrand (heading navy/ocean, logo di header), lalu
+Pandoc merakit DOCX dengan lebar gambar disetel agar pas kolom Word.
+
+> Daftar Isi DOCX adalah *field* Word — bila kosong saat dibuka, klik di dalamnya lalu tekan **F9**.
 
 ## Memperbarui screenshot
 
