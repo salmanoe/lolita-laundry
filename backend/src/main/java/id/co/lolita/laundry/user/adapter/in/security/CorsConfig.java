@@ -26,7 +26,10 @@ class CorsConfig {
                 "https://lolita-laundry.vercel.app" // Vercel production
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
+        // Only the headers the SPA actually sends (see frontend api/client.ts): the Auth0 bearer
+        // token and the JSON/multipart content type. Explicit list instead of "*" — narrower CORS
+        // surface (and avoids SonarQube S5122 on a wildcard combined with allowCredentials).
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         // Let the browser read the download filename on Excel exports (cross-origin in prod).
         config.setExposedHeaders(List.of("Content-Disposition"));
         config.setAllowCredentials(true);
