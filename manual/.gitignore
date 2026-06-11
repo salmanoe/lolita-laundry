@@ -1,0 +1,7 @@
+# Playwright deps for screenshot capture (re-install via npm install)
+capture/node_modules/
+capture/package-lock.json
+
+# Temp render artifacts
+_*.html
+_*.png
