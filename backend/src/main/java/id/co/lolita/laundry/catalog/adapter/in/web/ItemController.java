@@ -33,9 +33,10 @@ class ItemController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "name") String sort,
-            @RequestParam(defaultValue = "asc") String direction
+            @RequestParam(defaultValue = "asc") String direction,
+            @RequestParam(required = false) String search
     ) {
-        return getItems.getItems(PageQuery.of(page, size, sort, direction)).map(ItemResponse::from);
+        return getItems.getItems(PageQuery.of(page, size, sort, direction), search).map(ItemResponse::from);
     }
 
     /**

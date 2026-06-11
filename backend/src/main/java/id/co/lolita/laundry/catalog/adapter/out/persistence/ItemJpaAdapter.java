@@ -17,8 +17,11 @@ class ItemJpaAdapter implements ItemRepository {
     private final ItemJpaRepository jpaRepository;
 
     @Override
-    public Page<ItemMaster> findAll(PageQuery query) {
-        var springPage = jpaRepository.findAll(PageMapper.toPageable(query));
+    public Page<ItemMaster> findAll(PageQuery query, String search) {
+        var pageable = PageMapper.toPageable(query);
+        var springPage = (search == null || search.isBlank())
+                ? jpaRepository.findAll(pageable)
+                : jpaRepository.findByNameContainingIgnoreCase(search.trim(), pageable);
         return new Page<>(
                 springPage.getContent().stream().map(ItemJpaEntity::toDomain).toList(),
                 springPage.getNumber(), springPage.getSize(),

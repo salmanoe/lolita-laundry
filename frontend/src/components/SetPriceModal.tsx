@@ -85,7 +85,7 @@ export default function SetPriceModal({
   const activeItems = items?.filter((i) => i.active) ?? []
 
   return (
-    <Modal open={open} title="Atur Harga" onClose={onClose}>
+    <Modal open={open} title={presetItemId != null ? 'Atur Item' : 'Tambah Item'} onClose={onClose}>
       <form onSubmit={handleSubmit((v) => mutation.mutate(v))} className="space-y-3">
         <div>
           <label className={label}>Item</label>

@@ -120,4 +120,11 @@ class ClientController {
         return new PriceListResponse(saved.itemId(), saved.pricePerUnit(), saved.effectiveDate(),
                 request.departmentId());
     }
+
+    @DeleteMapping("/{clientId}/prices/{itemId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasAnyRole('OWNER', 'SUPER_ADMIN')")
+    void removeItemPricing(@PathVariable Long clientId, @PathVariable Long itemId) {
+        managePriceList.removeItemPricing(clientId, itemId);
+    }
 }

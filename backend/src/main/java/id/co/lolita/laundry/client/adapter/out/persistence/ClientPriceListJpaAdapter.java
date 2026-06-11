@@ -37,4 +37,9 @@ class ClientPriceListJpaAdapter implements ClientPriceListRepository {
     public ClientPriceList save(ClientPriceList entry) {
         return jpaRepository.save(ClientPriceListJpaEntity.fromDomain(entry)).toDomain();
     }
+
+    @Override
+    public void deleteByClientAndItem(Long clientId, Long itemId) {
+        jpaRepository.deleteByClientIdAndItemId(clientId, itemId);
+    }
 }
