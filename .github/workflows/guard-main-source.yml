@@ -1,0 +1,24 @@
+name: Guard main source branch
+
+# Enforce the branch model: only `develop` may be merged into `main`.
+# feature/* and hotfix/* branch from develop and merge back into develop;
+# main only ever receives develop. This check makes any other PR into main
+# go red so the ruleset can block the merge (see repo Settings → Rules).
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  enforce-develop-only:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require head branch to be develop
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "PR head branch: $HEAD_REF"
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::Only 'develop' may be merged into 'main'. This PR is from '$HEAD_REF'."
+            exit 1
+          fi
+          echo "OK: PR is from develop."
