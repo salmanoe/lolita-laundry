@@ -24,4 +24,10 @@ public interface ClientPriceListRepository {
     Optional<ClientPriceList> findExact(Long clientId, Long itemId, LocalDate effectiveDate);
 
     ClientPriceList save(ClientPriceList entry);
+
+    /**
+     * Removes all price-history rows for one item for a client (the item is no longer offered to
+     * that client). Existing orders are unaffected — they carry a frozen price snapshot.
+     */
+    void deleteByClientAndItem(Long clientId, Long itemId);
 }

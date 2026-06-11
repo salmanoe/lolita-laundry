@@ -1,6 +1,7 @@
 package id.co.lolita.laundry.client.adapter.out.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -48,4 +49,7 @@ interface ClientPriceListJpaRepository extends JpaRepository<ClientPriceListJpaE
             @Param("itemId") Long itemId,
             @Param("asOf") LocalDate asOf
     );
+
+    @Modifying
+    void deleteByClientIdAndItemId(Long clientId, Long itemId);
 }

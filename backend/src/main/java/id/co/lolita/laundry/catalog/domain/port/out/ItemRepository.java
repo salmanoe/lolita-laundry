@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ItemRepository {
-    Page<ItemMaster> findAll(PageQuery query);
+    Page<ItemMaster> findAll(PageQuery query, String search);
 
     List<ItemMaster> findAllActive();
 

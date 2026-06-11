@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -13,21 +13,30 @@ const SIZE = 10
 export default function ItemsPage() {
   const { getAccessTokenSilently } = useAuth()
   const [page, setPage] = useState(0)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [form, setForm] = useState<{ open: boolean; item?: Item }>({ open: false })
 
+  // Debounce the search term and reset to the first page whenever it changes.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim())
+      setPage(0)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [search])
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['items', { page }],
+    queryKey: ['items', { page, search: debouncedSearch }],
     queryFn: async () => {
       const token = await getAccessTokenSilently()
-      return apiFetch<Page<Item>>(`/api/items?page=${page}&size=${SIZE}&sort=name`, { token })
+      const q = debouncedSearch ? `&search=${encodeURIComponent(debouncedSearch)}` : ''
+      return apiFetch<Page<Item>>(`/api/items?page=${page}&size=${SIZE}&sort=name${q}`, { token })
     },
     placeholderData: keepPreviousData, // keep current rows visible while the next page loads
   })
 
   const unitsById = indexById(useLookupList('item-units').data)
-
-  if (isLoading) return <div className="text-sm text-gray-400">Memuat daftar item...</div>
-  if (error)    return <div className="text-sm text-red-500">Gagal memuat daftar item.</div>
 
   const items = data?.content ?? []
 
@@ -43,6 +52,19 @@ export default function ItemsPage() {
         </button>
       </div>
 
+      <input
+        type="search"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Cari item..."
+        className="mb-4 w-full max-w-sm rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+      />
+
+      {isLoading ? (
+        <div className="text-sm text-gray-400">Memuat daftar item...</div>
+      ) : error ? (
+        <div className="text-sm text-red-500">Gagal memuat daftar item.</div>
+      ) : (
       <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
@@ -77,7 +99,9 @@ export default function ItemsPage() {
             {items.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
-                  Belum ada item. Klik "Tambah Item" untuk menambahkan.
+                  {debouncedSearch
+                    ? `Tidak ada item yang cocok dengan "${debouncedSearch}".`
+                    : 'Belum ada item. Klik "Tambah Item" untuk menambahkan.'}
                 </td>
               </tr>
             )}
@@ -90,6 +114,7 @@ export default function ItemsPage() {
           onPage={setPage}
         />
       </div>
+      )}
 
       <ItemFormModal
         open={form.open}

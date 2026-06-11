@@ -26,4 +26,10 @@ public interface ManagePriceListUseCase {
     List<CurrentPrice> getCurrentPrices(Long clientId);
 
     ClientPriceList setPrice(SetPriceCommand command);
+
+    /**
+     * Removes an item from a client's price list entirely (all price-history rows + the
+     * item→department mapping). Existing orders keep their frozen price snapshot.
+     */
+    void removeItemPricing(Long clientId, Long itemId);
 }

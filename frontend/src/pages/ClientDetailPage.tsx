@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api/client'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { apiFetch, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import ClientFormModal from '../components/ClientFormModal'
 import DepartmentFormModal from '../components/DepartmentFormModal'
@@ -17,11 +17,13 @@ export default function ClientDetailPage() {
   const { id } = useParams()
   const clientId = Number(id)
   const { getAccessTokenSilently } = useAuth()
+  const qc = useQueryClient()
 
   const [editClient, setEditClient] = useState(false)
   const [deptForm, setDeptForm] = useState<{ open: boolean; department?: Department }>({ open: false })
   const [priceForm, setPriceForm] = useState<{ open: boolean; presetItemId?: number; presetDepartmentId?: number; presetPrice?: number; presetEffectiveDate?: string }>({ open: false })
   const [copied, setCopied] = useState(false)
+  const [priceSearch, setPriceSearch] = useState('')
 
   const token = async () => getAccessTokenSilently()
 
@@ -42,6 +44,14 @@ export default function ClientDetailPage() {
     queryFn: async () => apiFetch<Item[]>('/api/items/options', { token: await token() }),
   })
 
+  const deleteItem = useMutation({
+    mutationFn: async (itemId: number) =>
+      apiFetch(`/api/clients/${clientId}/prices/${itemId}`, { method: 'DELETE', token: await token() }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['prices', clientId] }),
+    onError: (e) =>
+      window.alert(e instanceof ApiError ? e.detail : 'Gagal menghapus item.'),
+  })
+
   const typesById = indexById(useLookupList('client-types').data)
   const unitsById = indexById(useLookupList('item-units').data)
 
@@ -53,6 +63,11 @@ export default function ClientDetailPage() {
   const itemsById = new Map((itemsQ.data ?? []).map((i) => [i.id, i]))
   const deptById = new Map((deptQ.data ?? []).map((d) => [d.id, d]))
   const activeDepartments = (deptQ.data ?? []).filter((d) => d.active)
+
+  const q = priceSearch.trim().toLowerCase()
+  const filteredPrices = q
+    ? (priceQ.data ?? []).filter((p) => (itemsById.get(p.itemId)?.name ?? '').toLowerCase().includes(q))
+    : (priceQ.data ?? [])
 
   return (
     <div className="space-y-8">
@@ -165,9 +180,18 @@ export default function ClientDetailPage() {
             onClick={() => setPriceForm({ open: true })}
             className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
           >
-            + Atur Harga
+            + Tambah Item
           </button>
         </div>
+        {(priceQ.data?.length ?? 0) > 0 && (
+          <input
+            type="search"
+            value={priceSearch}
+            onChange={(e) => setPriceSearch(e.target.value)}
+            placeholder="Cari item..."
+            className="mb-3 w-full max-w-sm rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+        )}
         <div className="overflow-x-auto rounded-lg border bg-white shadow-sm">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
@@ -178,7 +202,7 @@ export default function ClientDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {priceQ.data?.map((price) => {
+              {filteredPrices.map((price) => {
                 const item = itemsById.get(price.itemId)
                 return (
                   <tr key={price.itemId} className="hover:bg-gray-50">
@@ -194,18 +218,34 @@ export default function ClientDetailPage() {
                     <td className="px-4 py-3 font-medium text-gray-700">{rupiah(price.pricePerUnit)}</td>
                     <td className="px-4 py-3 text-gray-500">{price.effectiveDate}</td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setPriceForm({ open: true, presetItemId: price.itemId, presetDepartmentId: price.departmentId ?? undefined, presetPrice: price.pricePerUnit, presetEffectiveDate: price.effectiveDate })}
-                        className="text-sm font-medium text-brand-600 hover:text-brand-700"
-                      >
-                        Ubah Harga
-                      </button>
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setPriceForm({ open: true, presetItemId: price.itemId, presetDepartmentId: price.departmentId ?? undefined, presetPrice: price.pricePerUnit, presetEffectiveDate: price.effectiveDate })}
+                          className="text-sm font-medium text-brand-600 hover:text-brand-700"
+                        >
+                          Atur Item
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Hapus item "${item?.name ?? `#${price.itemId}`}" dari klien ini?`)) {
+                              deleteItem.mutate(price.itemId)
+                            }
+                          }}
+                          disabled={deleteItem.isPending}
+                          className="text-sm font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          Hapus
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )
               })}
               {priceQ.data?.length === 0 && (
                 <tr><td colSpan={perDepartment ? 6 : 5} className="px-4 py-6 text-center text-sm text-gray-400">Belum ada harga.</td></tr>
+              )}
+              {(priceQ.data?.length ?? 0) > 0 && filteredPrices.length === 0 && (
+                <tr><td colSpan={perDepartment ? 6 : 5} className="px-4 py-6 text-center text-sm text-gray-400">Tidak ada item yang cocok dengan "{priceSearch}".</td></tr>
               )}
             </tbody>
           </table>

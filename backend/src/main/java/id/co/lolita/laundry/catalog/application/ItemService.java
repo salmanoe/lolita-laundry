@@ -27,8 +27,8 @@ class ItemService implements GetItemsUseCase, ManageItemUseCase, CatalogQuery {
     private final ItemUnitRepository unitRepository;
 
     @Override
-    public Page<ItemMaster> getItems(PageQuery query) {
-        return itemRepository.findAll(query);
+    public Page<ItemMaster> getItems(PageQuery query, String search) {
+        return itemRepository.findAll(query, search);
     }
 
     @Override

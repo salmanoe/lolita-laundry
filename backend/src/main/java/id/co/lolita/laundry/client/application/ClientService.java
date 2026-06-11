@@ -158,6 +158,14 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
         return priceListRepository.save(entry);
     }
 
+    @Override
+    @Transactional
+    public void removeItemPricing(Long clientId, Long itemId) {
+        getClientById(clientId);  // 404 if the client doesn't exist
+        priceListRepository.deleteByClientAndItem(clientId, itemId);
+        itemDepartmentRepository.delete(clientId, itemId);
+    }
+
     /**
      * Upserts (or clears) the item→department assignment for a priced item. For a
      * PER_DEPARTMENT client the department is required and must belong to the client; for a
