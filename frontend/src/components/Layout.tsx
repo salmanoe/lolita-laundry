@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Navigate, NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import { BasketIcon, ChartIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, TowelsIcon, UsersIcon } from './NavIcons'
@@ -7,14 +7,15 @@ import { BasketIcon, ChartIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, T
 // `superAdminOnly` items (Item, Master Data, Pengguna) are visible only to SUPER_ADMIN — the
 // backend also enforces hasRole('SUPER_ADMIN') on those endpoints.
 const navItems = [
-  { to: '/',        label: 'Dasbor', Icon: HomeIcon },
-  { to: '/clients', label: 'Klien',  Icon: HotelIcon },
-  { to: '/orders',  label: 'Order',  Icon: BasketIcon },
-  { to: '/billing', label: 'Tagihan', Icon: InvoiceIcon },
-  { to: '/reports', label: 'Laporan', Icon: ChartIcon },
-  { to: '/items',   label: 'Item',   Icon: TowelsIcon, superAdminOnly: true },
+  { to: '/',           label: 'Dasbor',  Icon: HomeIcon },
+  { to: '/clients',    label: 'Klien',   Icon: HotelIcon },
+  { to: '/orders/new', label: 'Buat Order', Icon: BasketIcon, superAdminOnly: true },
+  { to: '/orders',     label: 'Order',   Icon: BasketIcon },
+  { to: '/billing',    label: 'Tagihan', Icon: InvoiceIcon },
+  { to: '/reports',    label: 'Laporan', Icon: ChartIcon },
+  { to: '/items',      label: 'Item',    Icon: TowelsIcon, superAdminOnly: true },
   { to: '/master-data', label: 'Master Data', Icon: SlidersIcon, superAdminOnly: true },
-  { to: '/users',   label: 'Pengguna', Icon: UsersIcon, superAdminOnly: true },
+  { to: '/users',      label: 'Pengguna', Icon: UsersIcon, superAdminOnly: true },
 ]
 
 function initials(name?: string) {
@@ -39,11 +40,6 @@ export default function Layout() {
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [menuOpen])
-
-  // Drivers have no admin access — send them to their delivery screen.
-  if (meQ.data?.role === 'DRIVER') {
-    return <Navigate to="/deliveries" replace />
-  }
 
   const isSuperAdmin = meQ.data?.role === 'SUPER_ADMIN'
   const visibleNav = navItems.filter((item) => !item.superAdminOnly || isSuperAdmin)
@@ -106,7 +102,7 @@ export default function Layout() {
               <NavLink
                 key={to}
                 to={to}
-                end={to === '/'}
+                end={to === '/' || to === '/orders'}
                 onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `group flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-medium transition-all ${

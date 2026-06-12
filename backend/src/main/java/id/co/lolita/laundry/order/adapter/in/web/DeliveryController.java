@@ -17,15 +17,15 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Driver-facing delivery operations. Drivers share one open pool: every driver sees every
- * order not yet delivered and can confirm any ready one — there is no per-driver assignment.
- * Never any pricing. Distinct from {@link OrderController} (OWNER / STAFF) to keep the least
- * privilege: the DRIVER role unlocks exactly these endpoints and nothing else.
+ * Delivery operations for the in-house DAILY_STAFF operators. They share one open pool: every
+ * operator sees every order not yet delivered and can confirm any one — there is no per-operator
+ * assignment. This shared-pool view is price-free, distinct from {@link OrderController}'s priced
+ * order list. SUPER_ADMIN may also confirm (full access).
  */
 @RestController
 @RequestMapping("/api/deliveries")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('DRIVER')")
+@PreAuthorize("hasAnyRole('DAILY_STAFF', 'SUPER_ADMIN')")
 class DeliveryController {
 
     private final GetDriverDeliveriesUseCase driverDeliveries;

@@ -4,12 +4,15 @@ import id.co.lolita.laundry.client.domain.Client;
 import id.co.lolita.laundry.shared.Page;
 import id.co.lolita.laundry.shared.PageQuery;
 
-import java.util.UUID;
+import java.util.List;
 
 public interface GetClientUseCase {
     Page<Client> getClients(PageQuery query);
 
-    Client getClientById(Long id);
+    /**
+     * All active clients, name-sorted — backs the order-form hotel dropdown.
+     */
+    List<Client> getActiveClients();
 
-    Client getClientByToken(UUID token);
+    Client getClientById(Long id);
 }

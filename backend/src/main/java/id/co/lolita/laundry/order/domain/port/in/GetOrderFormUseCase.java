@@ -1,10 +1,10 @@
 package id.co.lolita.laundry.order.domain.port.in;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
- * Builds the data a hotel staffer needs to fill the public order form for a given token.
+ * Builds the data a DAILY_STAFF operator needs to fill the in-house order form for a given client
+ * (selected from the hotel dropdown).
  */
 public interface GetOrderFormUseCase {
 
@@ -22,14 +22,15 @@ public interface GetOrderFormUseCase {
 
         /**
          * Only items the client has a current price for appear on the form. The price value
-         * itself is intentionally NOT exposed — hotel staff submit quantities, not prices.
-         * {@code departmentId} is the item's department for PER_DEPARTMENT clients (null for
-         * COMBINED) — the public form groups items by department.
+         * itself is intentionally NOT exposed on the form payload — staff submit quantities, and
+         * prices are resolved server-side at order creation. {@code departmentId} is the item's
+         * department for PER_DEPARTMENT clients (null for COMBINED) — the form groups items by
+         * department.
          */
         public record ItemLine(Long itemId, String name, Long unitId, String unitName,
                                Long departmentId) {
         }
     }
 
-    OrderFormView getPublicOrderForm(UUID token);
+    OrderFormView getOrderForm(Long clientId);
 }

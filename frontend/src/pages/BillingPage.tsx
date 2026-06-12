@@ -18,7 +18,7 @@ export default function BillingPage() {
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
   const role = useMe().data?.role
-  const canRegenerate = role === 'OWNER' || role === 'SUPER_ADMIN'
+  const canRegenerate = role === 'SUPER_ADMIN'
   const [clientId, setClientId] = useState<number | ''>('')
   const [year, setYear] = useState<number | ''>('')
   const [month, setMonth] = useState<number | ''>('')
@@ -31,7 +31,7 @@ export default function BillingPage() {
       return next
     })
 
-  // OWNER/SUPER_ADMIN bulk refresh: re-render every billing & invoice PDF to the current template
+  // SUPER_ADMIN bulk refresh: re-render every billing & invoice PDF to the current template
   // (layout-only — amounts unchanged). For applying a finalized PDF design before go-live.
   const regenAll = useMutation({
     mutationFn: async () =>

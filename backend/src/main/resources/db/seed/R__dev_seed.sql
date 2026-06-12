@@ -70,8 +70,8 @@ ON CONFLICT (client_code) DO NOTHING;
 -- SUPER_ADMIN under the 'authdev' profile (under 'dev' security is disabled so it is moot).
 INSERT INTO users (auth0_sub, full_name, role) VALUES
     ('auth0|6a20cc8b4ae1221e278dacaa', 'Super Admin',    'SUPER_ADMIN'),
-    ('auth0|6a2216426125bcfe9e007abb', 'Staff Lolita',   'STAFF'),
-    ('auth0|6a221661719be467f9f13430', 'Pengantar Lolita', 'DRIVER')
+    ('auth0|6a2216426125bcfe9e007abb', 'Staff Keuangan', 'FINANCE_STAFF'),
+    ('auth0|6a221661719be467f9f13430', 'Staff Harian',   'DAILY_STAFF')
 ON CONFLICT (auth0_sub) DO NOTHING;
 
 -- ── PBS departments (only PBS uses PER_DEPARTMENT billing) ──

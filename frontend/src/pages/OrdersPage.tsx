@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useMe } from '../auth/useMe'
 import Pagination from '../components/Pagination'
 import { orderStatusBadge, orderStatusLabel } from '../lib/labels'
-import type { Client, OrderStatus, OrderSummary, Page } from '../types/api'
+import type { ClientOption, OrderStatus, OrderSummary, Page } from '../types/api'
 
 const SIZE = 10
 const rupiah = (n: number) =>
@@ -15,19 +16,23 @@ const STATUSES: OrderStatus[] = ['RECEIVED', 'PROCESSING', 'DONE', 'DELIVERED', 
 
 export default function OrdersPage() {
   const { getAccessTokenSilently } = useAuth()
+  // DAILY_STAFF see the priced list but can't open the admin detail page (which reads
+  // FINANCE_STAFF-only endpoints), so their order-number is plain text, not a link.
+  const isDailyStaff = useMe().data?.role === 'DAILY_STAFF'
   const [page, setPage] = useState(0)
   const [clientId, setClientId] = useState<number | ''>('')
   const [status, setStatus] = useState<OrderStatus | ''>('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
-  // Client list for the filter dropdown and for resolving names in rows.
+  // Client options for the filter dropdown and for resolving names in rows. Uses the lightweight
+  // /options endpoint (readable by DAILY_STAFF too — the full client list is FINANCE_STAFF only).
   const clientsQ = useQuery({
     queryKey: ['clients', 'options'],
     queryFn: async () =>
-      apiFetch<Page<Client>>('/api/clients?page=0&size=200&sort=name', { token: await getAccessTokenSilently() }),
+      apiFetch<ClientOption[]>('/api/clients/options', { token: await getAccessTokenSilently() }),
   })
-  const clientsById = new Map((clientsQ.data?.content ?? []).map((c) => [c.id, c]))
+  const clientsById = new Map((clientsQ.data ?? []).map((c) => [c.id, c]))
 
   const params = new URLSearchParams({ page: String(page), size: String(SIZE) })
   if (clientId !== '') params.set('clientId', String(clientId))
@@ -65,7 +70,7 @@ export default function OrdersPage() {
           className={filterCls}
         >
           <option value="">Semua Klien</option>
-          {(clientsQ.data?.content ?? []).map((c) => (
+          {(clientsQ.data ?? []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
@@ -117,9 +122,13 @@ export default function OrdersPage() {
               {orders.map((o) => (
                 <tr key={o.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    <Link to={`/orders/${o.id}`} className="font-mono font-medium text-brand-700 hover:underline">
-                      {o.orderNumber}
-                    </Link>
+                    {isDailyStaff ? (
+                      <span className="font-mono font-medium text-gray-700">{o.orderNumber}</span>
+                    ) : (
+                      <Link to={`/orders/${o.id}`} className="font-mono font-medium text-brand-700 hover:underline">
+                        {o.orderNumber}
+                      </Link>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-gray-700">{clientsById.get(o.clientId)?.name ?? `#${o.clientId}`}</td>
                   <td className="px-4 py-3 text-gray-500">{o.orderDate}</td>

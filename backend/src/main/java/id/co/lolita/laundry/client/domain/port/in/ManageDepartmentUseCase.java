@@ -9,7 +9,7 @@ public interface ManageDepartmentUseCase {
     record CreateDepartmentCommand(Long clientId, String name) {
     }
 
-    record UpdateDepartmentCommand(Long id, String name, boolean active) {
+    record UpdateDepartmentCommand(Long clientId, Long id, String name, boolean active) {
     }
 
     List<Department> getDepartmentsByClient(Long clientId);

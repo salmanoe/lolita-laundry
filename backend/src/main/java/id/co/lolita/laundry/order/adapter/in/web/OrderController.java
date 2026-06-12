@@ -27,21 +27,35 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Authenticated order operations for Lolita staff (OWNER / STAFF / SUPER_ADMIN).
+ * Authenticated order operations. Reads + order creation are open to DAILY_STAFF (the in-house
+ * operators who enter orders and see the priced list) as well as FINANCE_STAFF / SUPER_ADMIN.
+ * Mutations (edit / advance status / cancel / staff-fallback delivery) are restricted to
+ * FINANCE_STAFF / SUPER_ADMIN via method-level overrides.
  */
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
 class OrderController {
 
     private final GetOrdersUseCase ordersQuery;
+    private final GetOrderFormUseCase orderForm;
     private final CreateOrderUseCase createOrder;
     private final UpdateOrderUseCase updateOrder;
     private final UpdateOrderStatusUseCase updateStatus;
     private final CancelOrderUseCase cancelOrder;
     private final DeliverOrderUseCase deliverOrder;
     private final CurrentUserResolver currentUser;
+
+    /**
+     * Order-form data for the in-house "Buat Order" screen: the selected client's priced items
+     * (grouped by department for PER_DEPARTMENT clients) and whether Treatment pricing applies.
+     * Replaces the retired public tokenized form — staff pick the hotel from a dropdown.
+     */
+    @GetMapping("/form")
+    OrderFormResponse form(@RequestParam Long clientId) {
+        return OrderFormResponse.from(orderForm.getOrderForm(clientId));
+    }
 
     @GetMapping
     Page<OrderSummaryResponse> list(
@@ -74,6 +88,7 @@ class OrderController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
     OrderResponse update(@PathVariable Long id, @Valid @RequestBody UpdateOrderRequest request) {
         var items = request.items() == null ? null
                 : request.items().stream().map(OrderLineRequest::toInput).toList();
@@ -82,6 +97,7 @@ class OrderController {
     }
 
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
     OrderResponse advanceStatus(@PathVariable Long id, @Valid @RequestBody AdvanceStatusRequest request,
                                 Authentication authentication) {
         var command = new AdvanceStatusCommand(
@@ -90,6 +106,7 @@ class OrderController {
     }
 
     @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
     OrderResponse cancel(@PathVariable Long id, @RequestBody(required = false) CancelOrderRequest request,
                          Authentication authentication) {
         var notes = request == null ? null : request.notes();
@@ -123,6 +140,7 @@ class OrderController {
      */
     @PostMapping(path = "/{id}/delivery", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
     DeliveryConfirmationResponse deliver(
             @PathVariable Long id,
             @RequestParam String recipientName,

@@ -44,22 +44,22 @@ class UserServiceTest {
     void create_rejectsDuplicateAuth0Sub() {
         when(userRepository.existsByAuth0Sub("auth0|new")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.create(new CreateUserCommand("auth0|new", "Budi", Role.DRIVER)))
+        assertThatThrownBy(() -> service.create(new CreateUserCommand("auth0|new", "Budi", Role.DAILY_STAFF)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("sudah terdaftar");
         verify(userRepository, never()).save(any());
     }
 
     @Test
-    void create_persistsNewDriver() {
+    void create_persistsNewDailyStaff() {
         when(userRepository.existsByAuth0Sub("auth0|new")).thenReturn(false);
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var created = service.create(new CreateUserCommand(" auth0|new ", " Joko ", Role.DRIVER));
+        var created = service.create(new CreateUserCommand(" auth0|new ", " Joko ", Role.DAILY_STAFF));
 
         assertThat(created.getAuth0Sub()).isEqualTo("auth0|new");
         assertThat(created.getFullName()).isEqualTo("Joko");
-        assertThat(created.getRole()).isEqualTo(Role.DRIVER);
+        assertThat(created.getRole()).isEqualTo(Role.DAILY_STAFF);
         assertThat(created.isActive()).isTrue();
     }
 
@@ -67,7 +67,7 @@ class UserServiceTest {
     void setActive_rejectsDeactivatingLastActiveSuperAdmin() {
         var admin = user(1, Role.SUPER_ADMIN, true);
         when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
-        when(userRepository.findAll()).thenReturn(List.of(admin, user(2, Role.OWNER, true)));
+        when(userRepository.findAll()).thenReturn(List.of(admin, user(2, Role.FINANCE_STAFF, true)));
 
         assertThatThrownBy(() -> service.setActive(1L, false))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -88,10 +88,10 @@ class UserServiceTest {
     }
 
     @Test
-    void setActive_allowsDeactivatingLastOwner() {
-        // OWNER is no longer the administrative role — only SUPER_ADMIN is guarded.
-        var owner = user(1, Role.OWNER, true);
-        when(userRepository.findById(1L)).thenReturn(Optional.of(owner));
+    void setActive_allowsDeactivatingLastNonAdmin() {
+        // Only SUPER_ADMIN is guarded; a FINANCE_STAFF (or DAILY_STAFF) is freely deactivatable.
+        var staff = user(1, Role.FINANCE_STAFF, true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(staff));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.setActive(1L, false);
@@ -105,7 +105,7 @@ class UserServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
         when(userRepository.findAll()).thenReturn(List.of(admin));
 
-        assertThatThrownBy(() -> service.update(new UpdateUserCommand(1L, "Admin", Role.OWNER)))
+        assertThatThrownBy(() -> service.update(new UpdateUserCommand(1L, "Admin", Role.FINANCE_STAFF)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("SUPER_ADMIN aktif terakhir");
         verify(userRepository, never()).save(any());
@@ -113,21 +113,21 @@ class UserServiceTest {
 
     @Test
     void update_renamesAndChangesRole() {
-        var staff = user(3, Role.STAFF, true);
+        var staff = user(3, Role.FINANCE_STAFF, true);
         when(userRepository.findById(3L)).thenReturn(Optional.of(staff));
         when(userRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var result = service.update(new UpdateUserCommand(3L, "Siti", Role.OWNER));
+        var result = service.update(new UpdateUserCommand(3L, "Siti", Role.DAILY_STAFF));
 
         assertThat(result.getFullName()).isEqualTo("Siti");
-        assertThat(result.getRole()).isEqualTo(Role.OWNER);
+        assertThat(result.getRole()).isEqualTo(Role.DAILY_STAFF);
     }
 
     @Test
     void update_missingUser_throwsNotFound() {
         when(userRepository.findById(9L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.update(new UpdateUserCommand(9L, "X", Role.STAFF)))
+        assertThatThrownBy(() -> service.update(new UpdateUserCommand(9L, "X", Role.FINANCE_STAFF)))
                 .isInstanceOf(NotFoundException.class);
     }
 }

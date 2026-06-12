@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
+@PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
 class OrderInvoiceController {
 
     private final GetBillingUseCase billingQuery;
