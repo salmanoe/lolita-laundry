@@ -16,8 +16,7 @@ const STATUSES: OrderStatus[] = ['RECEIVED', 'PROCESSING', 'DONE', 'DELIVERED', 
 
 export default function OrdersPage() {
   const { getAccessTokenSilently } = useAuth()
-  // DAILY_STAFF see the priced list but can't open the admin detail page (which reads
-  // FINANCE_STAFF-only endpoints), so their order-number is plain text, not a link.
+  // DAILY_STAFF are a price-free operator role — hide all monetary columns from them.
   const isDailyStaff = useMe().data?.role === 'DAILY_STAFF'
   const [page, setPage] = useState(0)
   const [clientId, setClientId] = useState<number | ''>('')
@@ -113,7 +112,7 @@ export default function OrdersPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['No. Order', 'Klien', 'Tanggal', 'Staff', 'Total', 'Status'].map((h) => (
+                {['No. Order', 'Klien', 'Tanggal', 'Staff', ...(isDailyStaff ? [] : ['Total']), 'Status'].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -122,18 +121,14 @@ export default function OrdersPage() {
               {orders.map((o) => (
                 <tr key={o.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
-                    {isDailyStaff ? (
-                      <span className="font-mono font-medium text-gray-700">{o.orderNumber}</span>
-                    ) : (
-                      <Link to={`/orders/${o.id}`} className="font-mono font-medium text-brand-700 hover:underline">
-                        {o.orderNumber}
-                      </Link>
-                    )}
+                    <Link to={`/orders/${o.id}`} className="font-mono font-medium text-brand-700 hover:underline">
+                      {o.orderNumber}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-700">{clientsById.get(o.clientId)?.name ?? `#${o.clientId}`}</td>
                   <td className="px-4 py-3 text-gray-500">{o.orderDate}</td>
                   <td className="px-4 py-3 text-gray-500">{o.submittedByName ?? '—'}</td>
-                  <td className="px-4 py-3 font-medium text-gray-700">{rupiah(o.total)}</td>
+                  {!isDailyStaff && <td className="px-4 py-3 font-medium text-gray-700">{rupiah(o.total)}</td>}
                   <td className="px-4 py-3">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${orderStatusBadge[o.status]}`}>
                       {orderStatusLabel[o.status]}
@@ -143,7 +138,7 @@ export default function OrdersPage() {
               ))}
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                  <td colSpan={isDailyStaff ? 5 : 6} className="px-4 py-8 text-center text-sm text-gray-400">
                     Belum ada order yang cocok dengan filter.
                   </td>
                 </tr>

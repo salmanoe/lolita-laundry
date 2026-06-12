@@ -1,6 +1,7 @@
 package id.co.lolita.laundry.order.adapter.in.web;
 
 import id.co.lolita.laundry.order.adapter.in.web.dto.*;
+import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderQuery;
 import id.co.lolita.laundry.order.domain.OrderStatus;
 import id.co.lolita.laundry.order.domain.port.in.*;
@@ -27,10 +28,10 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Authenticated order operations. Reads + order creation are open to DAILY_STAFF (the in-house
- * operators who enter orders and see the priced list) as well as FINANCE_STAFF / SUPER_ADMIN.
- * Mutations (edit / advance status / cancel / staff-fallback delivery) are restricted to
- * FINANCE_STAFF / SUPER_ADMIN via method-level overrides.
+ * Authenticated order operations, open to all three roles (DAILY_STAFF / FINANCE_STAFF /
+ * SUPER_ADMIN): reads, creation, edit, status advance, and cancel. The only method-level
+ * restriction left is the not-surfaced staff-fallback delivery confirm (FINANCE_STAFF/SUPER_ADMIN);
+ * the normal delivery path is the operator app (`/api/deliveries`).
  */
 @RestController
 @RequestMapping("/api/orders")
@@ -66,15 +67,18 @@ class OrderController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sort,
-            @RequestParam(defaultValue = "desc") String direction
+            @RequestParam(defaultValue = "desc") String direction,
+            Authentication authentication
     ) {
         var query = new OrderQuery(clientId, status, from, to, PageQuery.of(page, size, sort, direction));
-        return ordersQuery.getOrders(query).map(OrderSummaryResponse::from);
+        java.util.function.Function<Order, OrderSummaryResponse> mapper = priceFree(authentication)
+                ? OrderSummaryResponse::priceFree : OrderSummaryResponse::from;
+        return ordersQuery.getOrders(query).map(mapper);
     }
 
     @GetMapping("/{id}")
-    OrderResponse get(@PathVariable Long id) {
-        return OrderResponse.from(ordersQuery.getById(id));
+    OrderResponse get(@PathVariable Long id, Authentication authentication) {
+        return respond(ordersQuery.getById(id), authentication);
     }
 
     @PostMapping
@@ -84,34 +88,45 @@ class OrderController {
                 request.clientId(), request.treatment(), request.dueDate(),
                 request.submittedByName(), request.notes(), currentUser.currentUserId(authentication),
                 request.items().stream().map(OrderLineRequest::toInput).toList());
-        return OrderResponse.from(createOrder.createOrder(command));
+        return respond(createOrder.createOrder(command), authentication);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
-    OrderResponse update(@PathVariable Long id, @Valid @RequestBody UpdateOrderRequest request) {
+    OrderResponse update(@PathVariable Long id, @Valid @RequestBody UpdateOrderRequest request,
+                         Authentication authentication) {
         var items = request.items() == null ? null
                 : request.items().stream().map(OrderLineRequest::toInput).toList();
-        return OrderResponse.from(
-                updateOrder.updateOrder(new UpdateOrderCommand(id, request.dueDate(), request.notes(), items)));
+        return respond(
+                updateOrder.updateOrder(new UpdateOrderCommand(id, request.dueDate(), request.notes(), items)),
+                authentication);
     }
 
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
     OrderResponse advanceStatus(@PathVariable Long id, @Valid @RequestBody AdvanceStatusRequest request,
                                 Authentication authentication) {
         var command = new AdvanceStatusCommand(
                 id, request.status(), currentUser.currentUserId(authentication), request.notes());
-        return OrderResponse.from(updateStatus.advanceStatus(command));
+        return respond(updateStatus.advanceStatus(command), authentication);
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
     OrderResponse cancel(@PathVariable Long id, @RequestBody(required = false) CancelOrderRequest request,
                          Authentication authentication) {
         var notes = request == null ? null : request.notes();
-        return OrderResponse.from(cancelOrder.cancel(
-                new CancelOrderCommand(id, currentUser.currentUserId(authentication), notes)));
+        return respond(cancelOrder.cancel(
+                new CancelOrderCommand(id, currentUser.currentUserId(authentication), notes)), authentication);
+    }
+
+    // DAILY_STAFF are a price-free operator role: strip total/multiplier/line prices from the order
+    // response server-side (defense in depth — the React UI also hides them). In the dev profile
+    // (security disabled) there are no authorities, so prices are shown — fine for local dev.
+    private OrderResponse respond(Order order, Authentication authentication) {
+        return priceFree(authentication) ? OrderResponse.priceFree(order) : OrderResponse.from(order);
+    }
+
+    private boolean priceFree(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_DAILY_STAFF".equals(a.getAuthority()));
     }
 
     @GetMapping("/{id}/history")

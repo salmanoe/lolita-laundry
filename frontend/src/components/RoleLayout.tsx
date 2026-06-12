@@ -5,14 +5,15 @@ import OperatorLayout from './OperatorLayout'
 
 /**
  * Picks the app chrome by role for the authenticated route tree:
- * - DAILY_STAFF → the minimal {@link OperatorLayout} (Buat Order / Order / Pengantaran), and is
- *   kept on those three screens (any other path redirects to Buat Order). They can't open the
- *   admin order-detail page, which reads FINANCE_STAFF-only endpoints.
+ * - DAILY_STAFF → the minimal {@link OperatorLayout} (Buat Order / Order / Pengantaran). They manage
+ *   orders fully (create / edit / advance / cancel), so order-detail (`/orders/{id}`) is allowed too;
+ *   anything outside the order + delivery screens redirects back to Buat Order.
  * - everyone else (FINANCE_STAFF / SUPER_ADMIN / unresolved dev role) → the admin {@link Layout}.
  *
  * The backend @PreAuthorize is the real enforcement; this is UX (don't render dead/403 screens).
  */
-const DAILY_ALLOWED = new Set(['/orders', '/orders/new', '/deliveries'])
+const dailyStaffAllowed = (path: string) =>
+  path === '/orders' || path === '/orders/new' || path === '/deliveries' || /^\/orders\/\d+$/.test(path)
 
 export default function RoleLayout() {
   const meQ = useMe()
@@ -27,7 +28,7 @@ export default function RoleLayout() {
   }
 
   if (meQ.data?.role === 'DAILY_STAFF') {
-    if (!DAILY_ALLOWED.has(location.pathname)) {
+    if (!dailyStaffAllowed(location.pathname)) {
       return <Navigate to="/orders/new" replace />
     }
     return <OperatorLayout />

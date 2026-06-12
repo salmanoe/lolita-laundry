@@ -43,7 +43,7 @@ class ItemController {
      * Unpaged list of active items for selection dropdowns (e.g. setting a client price).
      */
     @GetMapping("/options")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
     List<ItemResponse> listItemOptions() {
         return getItems.getActiveItems().stream().map(ItemResponse::from).toList();
     }

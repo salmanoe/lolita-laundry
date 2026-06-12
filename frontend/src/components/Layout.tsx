@@ -9,7 +9,7 @@ import { BasketIcon, ChartIcon, HomeIcon, HotelIcon, InvoiceIcon, SlidersIcon, T
 const navItems = [
   { to: '/',           label: 'Dasbor',  Icon: HomeIcon },
   { to: '/clients',    label: 'Klien',   Icon: HotelIcon },
-  { to: '/orders/new', label: 'Buat Order', Icon: BasketIcon, superAdminOnly: true },
+  { to: '/orders/new', label: 'Buat Order', Icon: BasketIcon },
   { to: '/orders',     label: 'Order',   Icon: BasketIcon },
   { to: '/billing',    label: 'Tagihan', Icon: InvoiceIcon },
   { to: '/reports',    label: 'Laporan', Icon: ChartIcon },

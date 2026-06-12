@@ -29,4 +29,16 @@ public record OrderSummaryResponse(
                 o.getSubmittedByName(), o.total(), o.getCreatedAt()
         );
     }
+
+    /**
+     * Price-free variant for the DAILY_STAFF operator role: total and the pricing multiplier
+     * (which reveals Treatment ×2) are nulled out so no monetary data reaches the operator UI.
+     */
+    public static OrderSummaryResponse priceFree(Order o) {
+        return new OrderSummaryResponse(
+                o.getId(), o.getOrderNumber(), o.getClientId(),
+                o.getOrderDate(), o.getDueDate(), o.getStatus(), null,
+                o.getSubmittedByName(), null, o.getCreatedAt()
+        );
+    }
 }

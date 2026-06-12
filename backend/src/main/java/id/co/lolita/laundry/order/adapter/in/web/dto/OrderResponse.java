@@ -36,4 +36,19 @@ public record OrderResponse(
                 o.getLineItems().stream().map(OrderLineItemResponse::from).toList()
         );
     }
+
+    /**
+     * Price-free variant for the DAILY_STAFF operator role: total, the pricing multiplier, and
+     * every line's unit price + subtotal are nulled out so no monetary data reaches the operator UI.
+     */
+    public static OrderResponse priceFree(Order o) {
+        return new OrderResponse(
+                o.getId(), o.getOrderNumber(), o.getClientId(),
+                o.getOrderDate(), o.getDueDate(), o.getStatus(), null,
+                o.getSubmittedByName(), o.getNotes(), o.getCreatedByUserId(),
+                o.getCreatedAt(),
+                null,
+                o.getLineItems().stream().map(OrderLineItemResponse::priceFree).toList()
+        );
+    }
 }

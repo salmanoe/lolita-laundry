@@ -2,6 +2,7 @@ package id.co.lolita.laundry.report.adapter.in.web;
 
 import id.co.lolita.laundry.report.adapter.in.web.dto.DashboardAnalyticsResponse;
 import id.co.lolita.laundry.report.adapter.in.web.dto.DashboardSummaryResponse;
+import id.co.lolita.laundry.report.adapter.in.web.dto.FinanceTrendResponse;
 import id.co.lolita.laundry.report.domain.port.in.GetDashboardUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 
 /**
  * Dashboard endpoints. The operational {@code /summary} is FINANCE_STAFF/SUPER_ADMIN; the
@@ -40,5 +42,12 @@ class DashboardController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return DashboardAnalyticsResponse.from(dashboard.analytics(from, to));
+    }
+
+    // Monthly revenue + order-count series for the FINANCE_STAFF dashboard trend (inherits the
+    // class FINANCE_STAFF/SUPER_ADMIN gate — no business-analytics detail, just totals per month).
+    @GetMapping("/finance-trend")
+    List<FinanceTrendResponse> financeTrend(@RequestParam(defaultValue = "6") int months) {
+        return dashboard.financeTrend(months).stream().map(FinanceTrendResponse::from).toList();
     }
 }

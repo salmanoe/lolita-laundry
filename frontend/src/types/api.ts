@@ -265,6 +265,13 @@ export interface DashboardSummary {
   revenueThisMonth: number
 }
 
+/** One month on the FINANCE_STAFF dashboard trend — mirrors FinanceTrendResponse. `month` is "YYYY-MM". */
+export interface FinanceTrendPoint {
+  month:      string
+  revenue:    number
+  orderCount: number
+}
+
 /** Owner analytics dashboard payload — mirrors DashboardAnalyticsResponse. `month` is "YYYY-MM". */
 export interface DashboardAnalytics {
   from:           string

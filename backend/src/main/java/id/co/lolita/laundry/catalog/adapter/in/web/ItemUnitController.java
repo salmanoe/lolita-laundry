@@ -21,10 +21,11 @@ class ItemUnitController {
 
     private final ItemUnitUseCase itemUnits;
 
-    // Reference-data lists stay readable by FINANCE_STAFF (they resolve unit labels for orders);
-    // SUPER_ADMIN reads them on the Master Data screen. Mutations are SUPER_ADMIN-only.
+    // Reference-data lists stay readable by DAILY_STAFF/FINANCE_STAFF (they resolve unit labels for
+    // the order create/edit screens); SUPER_ADMIN reads them on the Master Data screen. Mutations are
+    // SUPER_ADMIN-only.
     @GetMapping
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
     List<LookupResponse> list() {
         return itemUnits.list().stream().map(LookupResponse::from).toList();
     }

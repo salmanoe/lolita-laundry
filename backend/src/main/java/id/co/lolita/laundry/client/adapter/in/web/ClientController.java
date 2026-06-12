@@ -48,8 +48,9 @@ class ClientController {
         return clientQuery.getActiveClients().stream().map(ClientOptionResponse::from).toList();
     }
 
+    // DAILY_STAFF included: they open the order-detail/edit screens, which resolve the client name.
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
     ClientResponse getClient(@PathVariable Long id) {
         return ClientResponse.from(clientQuery.getClientById(id));
     }
@@ -84,7 +85,7 @@ class ClientController {
     // ── Departments ──
 
     @GetMapping("/{clientId}/departments")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
     List<DepartmentResponse> listDepartments(@PathVariable Long clientId) {
         return manageDepartment.getDepartmentsByClient(clientId).stream()
                 .map(DepartmentResponse::from).toList();
@@ -111,8 +112,9 @@ class ClientController {
 
     // ── Price list ──
 
+    // DAILY_STAFF included: the order-edit screen re-prices line items from the client's price list.
     @GetMapping("/{clientId}/prices")
-    @PreAuthorize("hasAnyRole('FINANCE_STAFF', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
     List<PriceListResponse> getPrices(@PathVariable Long clientId) {
         return managePriceList.getCurrentPrices(clientId).stream()
                 .map(PriceListResponse::from).toList();
