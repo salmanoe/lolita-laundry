@@ -1,6 +1,6 @@
-# Playwright deps for screenshot capture (re-install via npm install)
+# Playwright deps for screenshot capture (re-install via npm install).
+# package-lock.json is committed so dependency versions are reproducible (SonarCloud).
 capture/node_modules/
-capture/package-lock.json
 
 # Temp render artifacts
 _*.html
