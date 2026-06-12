@@ -105,6 +105,24 @@ class ReportService implements GetDashboardUseCase, GetReportsUseCase, ExportRep
     }
 
     @Override
+    public List<MonthlyTotals> financeTrend(int months) {
+        int span = Math.clamp(months, 1, 24);   // clamp to a sane window
+        YearMonth current = YearMonth.from(LocalDate.now());
+        List<MonthlyTotals> series = new ArrayList<>();
+        for (int i = span - 1; i >= 0; i--) {
+            YearMonth ym = current.minusMonths(i);
+            BigDecimal revenue = BigDecimal.ZERO;
+            long orderCount = 0;
+            for (var t : orders.billableByClient(ym.atDay(1), ym.atEndOfMonth())) {
+                revenue = revenue.add(t.total());
+                orderCount += t.orderCount();
+            }
+            series.add(new MonthlyTotals(ym, revenue, orderCount));
+        }
+        return series;
+    }
+
+    @Override
     public DailyReport daily(LocalDate date) {
         List<ClientLine> lines = clientLines(orders.billableByClient(date, date));
         return new DailyReport(date, lines, grandTotal(lines));

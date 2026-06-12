@@ -16,4 +16,10 @@ public record OrderLineItemResponse(
         return new OrderLineItemResponse(li.id(), li.itemId(), li.quantity(),
                 li.priceAtOrder(), li.subtotal(), li.departmentId());
     }
+
+    /** Price-free variant for the DAILY_STAFF operator role — unit price + subtotal nulled out. */
+    public static OrderLineItemResponse priceFree(OrderLineItem li) {
+        return new OrderLineItemResponse(li.id(), li.itemId(), li.quantity(),
+                null, null, li.departmentId());
+    }
 }

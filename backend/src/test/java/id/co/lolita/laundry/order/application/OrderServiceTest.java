@@ -9,7 +9,6 @@ import id.co.lolita.laundry.order.domain.port.in.CancelOrderUseCase;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.OrderLineInput;
-import id.co.lolita.laundry.order.domain.port.in.SubmitPublicOrderUseCase.SubmitPublicOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.UpdateOrderStatusUseCase.AdvanceStatusCommand;
 import id.co.lolita.laundry.order.domain.port.out.CatalogGateway;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway;
@@ -37,7 +36,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -78,8 +76,6 @@ class OrderServiceTest {
     @InjectMocks
     OrderService service;
 
-    private static final UUID TOKEN = UUID.randomUUID();
-
     @BeforeEach
     void wireSelf() {
         // The creation paths re-enter via the self proxy (order-number retry); outside Spring the
@@ -106,14 +102,14 @@ class OrderServiceTest {
     }
 
     @Test
-    void submit_generatesSequentialOrderNumber_andSnapshotsPrice() {
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+    void createOrder_generatesSequentialOrderNumber_andSnapshotsPrice() {
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
         when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var result = service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", false, null,
+        var result = service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null,
                 List.of(new OrderLineInput(10L, new BigDecimal("3")))));
 
         var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-001";
@@ -126,53 +122,53 @@ class OrderServiceTest {
     }
 
     @Test
-    void submit_rejectsInactiveToken() {
-        when(clientGateway.findByToken(TOKEN))
+    void createOrder_rejectsInactiveClient() {
+        when(clientGateway.findById(1L))
                 .thenReturn(Optional.of(new ClientSnapshot(1L, "X", "X", false, false)));
 
-        assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(IllegalArgumentException.class);
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void submit_rejectsTreatmentForCombinedClient() {
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+    void createOrder_rejectsTreatmentForCombinedClient() {
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
 
-        assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", true, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
+                1L, true, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Treatment");
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void submit_rejectsItemWithoutDepartmentForPerDepartmentClient() {
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(true)));
+    void createOrder_rejectsItemWithoutDepartmentForPerDepartmentClient() {
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(true)));
         when(catalogGateway.findActiveById(10L))
                 .thenReturn(Optional.of(new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs")));
         when(pricingGateway.effectivePrice(eq(1L), eq(10L), any()))
                 .thenReturn(Optional.of(new BigDecimal("5000")));
         when(pricingGateway.departmentForItem(1L, 10L)).thenReturn(Optional.empty());   // not assigned
 
-        assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("department");
         verify(orderRepository, never()).save(any());
     }
 
     @Test
-    void submit_appliesTreatmentMultiplier_andStampsLineDepartment_forPerDepartmentClient() {
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(true)));
+    void createOrder_appliesTreatmentMultiplier_andStampsLineDepartment_forPerDepartmentClient() {
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(true)));
         stubPricingForItem10();
         when(pricingGateway.departmentForItem(1L, 10L)).thenReturn(Optional.of(7L));
         when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var result = service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", true, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
+        var result = service.createOrder(new CreateOrderCommand(
+                1L, true, null, "Budi", null, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
 
         assertThat(result.getPricingMultiplier()).isEqualByComparingTo("2.0");
         assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("30000.00");
@@ -240,10 +236,10 @@ class OrderServiceTest {
     }
 
     @Test
-    void submit_retriesOnceWhenOrderNumberCollides() {
+    void createOrder_retriesOnceWhenOrderNumberCollides() {
         // A concurrent submit grabbed the same computed order_number: the first save fails on
         // UNIQUE(order_number); the retry recomputes the sequence and succeeds.
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
         when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
                 .thenReturn(0L)   // first attempt → -001
@@ -252,8 +248,8 @@ class OrderServiceTest {
                 .thenThrow(new DataIntegrityViolationException("duplicate order_number"))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        var result = service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
+        var result = service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
 
         var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-002";
         assertThat(result.getOrderNumber()).isEqualTo(expected);
@@ -261,9 +257,9 @@ class OrderServiceTest {
     }
 
     @Test
-    void submit_retriesAcrossSeveralCollisions_thenSucceeds() {
+    void createOrder_retriesAcrossSeveralCollisions_thenSucceeds() {
         // A runtime burst showed a single retry is too thin; the loop tolerates several rounds.
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
         when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
                 .thenReturn(0L, 1L, 2L, 3L);
@@ -273,8 +269,8 @@ class OrderServiceTest {
                 .thenThrow(new DataIntegrityViolationException("dup"))
                 .thenAnswer(inv -> inv.getArgument(0));
 
-        var result = service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, new BigDecimal("1")))));
+        var result = service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, new BigDecimal("1")))));
 
         var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-004";
         assertThat(result.getOrderNumber()).isEqualTo(expected);
@@ -282,15 +278,15 @@ class OrderServiceTest {
     }
 
     @Test
-    void submit_exhaustsRetries_throwsFriendlyConflict() {
+    void createOrder_exhaustsRetries_throwsFriendlyConflict() {
         // Every attempt collides → a friendly 409, never the raw DB error or a 500.
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
         when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
         when(orderRepository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
 
-        assertThatThrownBy(() -> service.submit(new SubmitPublicOrderCommand(
-                TOKEN, "Budi", false, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("coba lagi");
         verify(orderRepository, times(8)).save(any());   // MAX_ORDER_NUMBER_ATTEMPTS
@@ -426,8 +422,8 @@ class OrderServiceTest {
     }
 
     @Test
-    void getPublicOrderForm_showsOnlyTheClientsPricedItems_withDepartment() {
-        when(clientGateway.findByToken(TOKEN)).thenReturn(Optional.of(client(false)));
+    void getOrderForm_showsOnlyTheClientsPricedItems_withDepartment() {
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         // Client has a price only for item 10; item 20 is active but unpriced for this client.
         when(pricingGateway.currentPrices(1L)).thenReturn(List.of(
                 new PricingGateway.ItemPrice(10L, new BigDecimal("5000"))));
@@ -436,7 +432,7 @@ class OrderServiceTest {
                 new CatalogGateway.CatalogItem(10L, "Sheet King", 1L, "Pcs"),
                 new CatalogGateway.CatalogItem(20L, "Bath Towel", 2L, "Lembar")));
 
-        var view = service.getPublicOrderForm(TOKEN);
+        var view = service.getOrderForm(1L);
 
         assertThat(view.items()).singleElement().satisfies(item -> {
             assertThat(item.itemId()).isEqualTo(10L);          // unpriced item 20 is excluded

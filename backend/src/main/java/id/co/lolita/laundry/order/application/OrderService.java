@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
@@ -35,7 +34,7 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, CreateOrderUseCase,
+class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
         GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, CancelOrderUseCase,
         DeliverOrderUseCase, GetDriverDeliveriesUseCase, DeliveredOrderQuery {
 
@@ -66,8 +65,10 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     // ── GetOrderFormUseCase ──
 
     @Override
-    public OrderFormView getPublicOrderForm(UUID token) {
-        var client = activeClientByToken(token);
+    public OrderFormView getOrderForm(Long clientId) {
+        var client = clientGateway.findById(clientId)
+                .filter(ClientSnapshot::active)
+                .orElseThrow(() -> new NotFoundException("Client not found or inactive: " + clientId));
 
         List<OrderFormView.DepartmentLine> departments = client.perDepartment()
                 ? departmentGateway.activeForClient(client.id()).stream()
@@ -95,25 +96,6 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
 
         return new OrderFormView(client.id(), client.name(), client.clientCode(),
                 client.perDepartment(), client.perDepartment(), departments, items);
-    }
-
-    // ── SubmitPublicOrderUseCase ──
-
-    // Non-transactional wrapper: the order-number retry must span transactions (each attempt
-    // re-reads the per-day sequence in a fresh tx), so the outer call suspends any ambient tx.
-    @Override
-    @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Order submit(SubmitPublicOrderCommand command) {
-        requireName(command.submittedByName());
-        return serializedPerClient("tok:" + command.token(),
-                () -> withOrderNumberRetry(() -> self.getObject().submitInTx(command)));
-    }
-
-    @Transactional
-    public Order submitInTx(SubmitPublicOrderCommand command) {
-        var client = activeClientByToken(command.token());
-        return assemble(client, command.treatment(), null,
-                command.submittedByName(), command.notes(), null, command.items());
     }
 
     // ── CreateOrderUseCase ──
@@ -471,12 +453,6 @@ class OrderService implements GetOrderFormUseCase, SubmitPublicOrderUseCase, Cre
     private String generateOrderNumber(ClientSnapshot client, LocalDate date) {
         long seq = orderRepository.countByClientIdAndOrderDate(client.id(), date) + 1;
         return "%s-%s-%03d".formatted(client.clientCode(), date.format(ORDER_DATE_FORMAT), seq);
-    }
-
-    private ClientSnapshot activeClientByToken(UUID token) {
-        return clientGateway.findByToken(token)
-                .filter(ClientSnapshot::active)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid or inactive order token"));
     }
 
     private Order loadOrder(Long id) {

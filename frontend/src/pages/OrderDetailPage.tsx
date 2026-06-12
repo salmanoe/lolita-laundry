@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useMe } from '../auth/useMe'
 import EditOrderModal from '../components/EditOrderModal'
 import { nextAdvanceStatus, orderStatusBadge, orderStatusLabel } from '../lib/labels'
 import type {
@@ -24,6 +25,9 @@ export default function OrderDetailPage() {
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
   const token = async () => getAccessTokenSilently()
+  // DAILY_STAFF manage orders but stay out of billing — the invoice PDF (and its prices) is
+  // FINANCE_STAFF/SUPER_ADMIN only, so hide its button for them.
+  const isDailyStaff = useMe().data?.role === 'DAILY_STAFF'
 
   const [editOpen, setEditOpen] = useState(false)
 
@@ -116,7 +120,7 @@ export default function OrderDetailPage() {
                 Ubah Order
               </button>
             )}
-            {order.status !== 'CANCELLED' && (
+            {order.status !== 'CANCELLED' && !isDailyStaff && (
               <button
                 onClick={() => openInvoice.mutate()}
                 disabled={openInvoice.isPending}
@@ -174,7 +178,7 @@ export default function OrderDetailPage() {
         <Info label="Tanggal Order" value={order.orderDate} />
         <Info label="Jatuh Tempo" value={order.dueDate ?? '—'} />
         <Info label="Staff Pengirim" value={order.submittedByName ?? '—'} />
-        <Info label="Total" value={<span className="font-semibold">{rupiah(order.total)}</span>} />
+        {!isDailyStaff && <Info label="Total" value={<span className="font-semibold">{rupiah(order.total)}</span>} />}
         {order.notes && <Info label="Catatan" value={order.notes} />}
       </dl>
 
@@ -185,7 +189,7 @@ export default function OrderDetailPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Item', ...(showDept ? ['Departemen'] : []), 'Qty', 'Harga Satuan', 'Subtotal'].map((h) => (
+                {['Item', ...(showDept ? ['Departemen'] : []), 'Qty', ...(isDailyStaff ? [] : ['Harga Satuan', 'Subtotal'])].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -200,17 +204,23 @@ export default function OrderDetailPage() {
                     </td>
                   )}
                   <td className="px-4 py-3 text-gray-500">{li.quantity}</td>
-                  <td className="px-4 py-3 text-gray-500">{rupiah(li.priceAtOrder * order.pricingMultiplier)}</td>
-                  <td className="px-4 py-3 font-medium text-gray-700">{rupiah(li.subtotal)}</td>
+                  {!isDailyStaff && (
+                    <>
+                      <td className="px-4 py-3 text-gray-500">{rupiah(li.priceAtOrder * order.pricingMultiplier)}</td>
+                      <td className="px-4 py-3 font-medium text-gray-700">{rupiah(li.subtotal)}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr className="border-t bg-gray-50">
-                <td colSpan={showDept ? 4 : 3} className="px-4 py-3 text-right font-medium text-gray-600">Total</td>
-                <td className="px-4 py-3 font-bold text-gray-800">{rupiah(order.total)}</td>
-              </tr>
-            </tfoot>
+            {!isDailyStaff && (
+              <tfoot>
+                <tr className="border-t bg-gray-50">
+                  <td colSpan={showDept ? 4 : 3} className="px-4 py-3 text-right font-medium text-gray-600">Total</td>
+                  <td className="px-4 py-3 font-bold text-gray-800">{rupiah(order.total)}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </section>

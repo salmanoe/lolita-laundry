@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useMe } from '../auth/useMe'
 import { indexById, useLookupList } from '../lib/lookups'
 import OrderItemPicker, { toLineItems, type QuantityMap } from './OrderItemPicker'
 import type { Department, Item, Order, OrderFormItem, PriceListEntry } from '../types/api'
@@ -25,6 +26,8 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
   const token = async () => getAccessTokenSilently()
+  // DAILY_STAFF are price-free: they edit quantities without seeing unit prices or totals.
+  const isDailyStaff = useMe().data?.role === 'DAILY_STAFF'
 
   const itemsQ = useQuery({
     queryKey: ['items', 'options'],
@@ -134,6 +137,7 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
                 departmentName={(did) => deptNameById.get(did) ?? '—'}
                 unitName={(uid) => unitsById.get(uid)?.displayName ?? '—'}
                 multiplier={multiplier}
+                showPrices={!isDailyStaff}
                 quantities={quantities}
                 onChange={setQuantities}
               />
@@ -150,7 +154,7 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
         <div className="flex items-center justify-between gap-4 border-t px-6 py-4">
           <div>
             <p className="text-xs text-gray-400">{lines.length} item</p>
-            <p className="text-base font-bold text-gray-800">{rupiah(total)}</p>
+            {!isDailyStaff && <p className="text-base font-bold text-gray-800">{rupiah(total)}</p>}
           </div>
           <div className="flex gap-2">
             <button onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">

@@ -2,11 +2,12 @@
 // These mirror the backend DTOs. Keep in sync with the Java record definitions.
 
 /**
- * Lolita user roles. Hotel staff are not users (they use tokenized public links).
- * SUPER_ADMIN is the top-level administrator (all dashboards + system config + adjustments);
- * OWNER is a business/analytics viewer; STAFF runs day-to-day operations; DRIVER the delivery app.
+ * Lolita user roles (3-role model).
+ * - SUPER_ADMIN — top-level administrator (all dashboards + system config + adjustments).
+ * - FINANCE_STAFF — finance/back-office: clients (read), orders, billing, reports, operational dashboard.
+ * - DAILY_STAFF — in-house operator: enters orders, sees the priced order list, confirms deliveries.
  */
-export type Role = 'SUPER_ADMIN' | 'OWNER' | 'STAFF' | 'DRIVER'
+export type Role = 'SUPER_ADMIN' | 'FINANCE_STAFF' | 'DAILY_STAFF'
 
 /** Current authenticated user — mirrors MeResponse. Drives role-aware routing. */
 export interface Me {
@@ -85,6 +86,13 @@ export interface Department {
   active:   boolean
 }
 
+/** Lightweight client option for the order-form hotel dropdown — mirrors ClientOptionResponse. */
+export interface ClientOption {
+  id:         number
+  clientCode: string
+  name:       string
+}
+
 export interface PriceListEntry {
   itemId:        number
   pricePerUnit:  number
@@ -97,7 +105,7 @@ export interface PriceListEntry {
 /** Lifecycle: RECEIVED → PROCESSING → DONE → DELIVERED, with CANCELLED as a terminal off-ramp. */
 export type OrderStatus = 'RECEIVED' | 'PROCESSING' | 'DONE' | 'DELIVERED' | 'CANCELLED'
 
-/** Public order-form payload — mirrors OrderFormResponse. */
+/** Order-form payload for the in-house "Buat Order" screen — mirrors OrderFormResponse. */
 export interface OrderForm {
   clientId:           number
   clientName:         string
@@ -115,7 +123,7 @@ export interface OrderFormItem {
   unitName:     string | null
   // Item's department for PER_DEPARTMENT clients (the form groups by it); null for COMBINED.
   departmentId: number | null
-  // Public order-form items omit price (never exposed to hotel staff). The authenticated
+  // The order-form payload omits price (resolved server-side at creation). The authenticated
   // staff edit screen builds OrderFormItem locally and sets this for its price preview.
   price?:       number
 }
@@ -255,6 +263,13 @@ export interface DashboardSummary {
   inProgress:       number
   readyForDelivery: number
   revenueThisMonth: number
+}
+
+/** One month on the FINANCE_STAFF dashboard trend — mirrors FinanceTrendResponse. `month` is "YYYY-MM". */
+export interface FinanceTrendPoint {
+  month:      string
+  revenue:    number
+  orderCount: number
 }
 
 /** Owner analytics dashboard payload — mirrors DashboardAnalyticsResponse. `month` is "YYYY-MM". */

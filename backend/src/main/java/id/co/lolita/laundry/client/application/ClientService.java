@@ -47,16 +47,14 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     }
 
     @Override
-    public Client getClientById(Long id) {
-        return clientRepository.findById(id)
-                .orElseThrow(() -> new NotFoundException("Client not found: " + id));
+    public List<Client> getActiveClients() {
+        return clientRepository.findAllActive();
     }
 
     @Override
-    public Client getClientByToken(UUID token) {
-        return clientRepository.findByOrderToken(token)
-                .filter(Client::isActive)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid or inactive order token"));
+    public Client getClientById(Long id) {
+        return clientRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Client not found: " + id));
     }
 
     // ── ManageClientUseCase ──
@@ -121,6 +119,13 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     public Department updateDepartment(UpdateDepartmentCommand command) {
         var department = departmentRepository.findById(command.id())
                 .orElseThrow(() -> new NotFoundException("Department not found: " + command.id()));
+        // The department is addressed under /clients/{clientId}/departments/{deptId}; reject a
+        // mismatched URL (a department that doesn't belong to that client) rather than silently
+        // editing another client's department.
+        if (!department.getClientId().equals(command.clientId())) {
+            throw new NotFoundException(
+                    "Department %d does not belong to client %d".formatted(command.id(), command.clientId()));
+        }
         department.rename(command.name());
         if (command.active()) {
             department.activate();

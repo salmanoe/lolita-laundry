@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useMe } from './useMe'
 
 /**
- * Guards SUPER_ADMIN-only screens (Pengguna, Item, Master Data). A known OWNER/STAFF/DRIVER is
+ * Guards SUPER_ADMIN-only screens (Pengguna, Item, Master Data). A known FINANCE_STAFF/DAILY_STAFF is
  * bounced to the dashboard; an unresolved role (dev/mock — backend replies 204 to /api/me) is
  * allowed through, matching how the rest of the app fails open when there is no users row and
  * method security is disabled in the dev profile. The backend @PreAuthorize is the real enforcement.
@@ -18,7 +18,7 @@ export default function RequireSuperAdmin({ children }: { children: ReactNode })
     )
   }
   const role = meQ.data?.role
-  if (role === 'OWNER' || role === 'STAFF' || role === 'DRIVER') {
+  if (role === 'FINANCE_STAFF' || role === 'DAILY_STAFF') {
     return <Navigate to="/" replace />
   }
   return <>{children}</>

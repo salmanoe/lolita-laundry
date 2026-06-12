@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { useMe } from '../auth/useMe'
 import OperationalDashboard from '../components/dashboard/OperationalDashboard'
 
-// Recharts is pulled in only via this lazy import, so STAFF / non-dashboard navigation never pays for it.
+// Recharts is pulled in only via this lazy import, so FINANCE_STAFF / non-dashboard navigation never pays for it.
 const AnalyticalDashboard = lazy(() => import('../components/dashboard/AnalyticalDashboard'))
 
 const spinner = (
@@ -17,11 +17,10 @@ function analytical() {
 
 /**
  * Role-aware dashboard.
- * - STAFF → operational summary only.
- * - OWNER → analytical dashboard only.
+ * - FINANCE_STAFF → operational summary only.
  * - SUPER_ADMIN → both, switchable via a toggle (defaults to analytical).
  * - Unresolved dev/mock role fails open to the analytical view.
- * DRIVER never reaches here — Layout redirects them to /deliveries.
+ * DAILY_STAFF never reaches here — RoleLayout routes them to their operator shell.
  */
 export default function DashboardPage() {
   const meQ = useMe()
@@ -33,12 +32,8 @@ export default function DashboardPage() {
 
   const role = meQ.data?.role
 
-  if (role === 'STAFF') {
+  if (role === 'FINANCE_STAFF') {
     return <OperationalDashboard />
-  }
-
-  if (role === 'OWNER') {
-    return analytical()
   }
 
   // SUPER_ADMIN (and unresolved dev/mock role) — full access to both views.

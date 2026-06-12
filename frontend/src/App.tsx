@@ -1,8 +1,7 @@
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import AuthGuard from './auth/AuthGuard'
 import RequireSuperAdmin from './auth/RequireSuperAdmin'
-import Layout from './components/Layout'
-import DriverLayout from './components/DriverLayout'
+import RoleLayout from './components/RoleLayout'
 import DeliveriesPage from './pages/DeliveriesPage'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -12,12 +11,12 @@ import ClientDetailPage from './pages/ClientDetailPage'
 import ItemsPage from './pages/ItemsPage'
 import MasterDataPage from './pages/MasterDataPage'
 import OrdersPage from './pages/OrdersPage'
+import NewOrderPage from './pages/NewOrderPage'
 import OrderDetailPage from './pages/OrderDetailPage'
 import BillingPage from './pages/BillingPage'
 import BillingDetailPage from './pages/BillingDetailPage'
 import ReportsPage from './pages/ReportsPage'
 import UsersPage from './pages/UsersPage'
-import PublicOrderPage from './pages/PublicOrderPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 const router = createBrowserRouter([
@@ -26,19 +25,10 @@ const router = createBrowserRouter([
     element: <LoginPage />,
   },
   {
-    // Public tokenized order form — no Auth0 session required
-    path: '/order/:token',
-    element: <PublicOrderPage />,
-  },
-  {
-    // Driver delivery app — minimal shell, no admin sidebar. DriverLayout bounces non-drivers to '/'.
-    path: '/deliveries',
-    element: <AuthGuard><DriverLayout /></AuthGuard>,
-    children: [{ index: true, element: <DeliveriesPage /> }],
-  },
-  {
-    // All routes inside here require a valid Auth0 session. Layout redirects DRIVER users to /deliveries.
-    element: <AuthGuard><Layout /></AuthGuard>,
+    // All routes require a valid Auth0 session. RoleLayout picks the chrome by role:
+    // DAILY_STAFF get the minimal operator shell (Buat Order / Order / Pengantaran); everyone
+    // else gets the admin sidebar.
+    element: <AuthGuard><RoleLayout /></AuthGuard>,
     children: [
       { index: true,         element: <DashboardPage /> },
       { path: 'clients',     element: <ClientsPage /> },
@@ -46,11 +36,13 @@ const router = createBrowserRouter([
       { path: 'items',       element: <RequireSuperAdmin><ItemsPage /></RequireSuperAdmin> },
       { path: 'master-data', element: <RequireSuperAdmin><MasterDataPage /></RequireSuperAdmin> },
       { path: 'orders',      element: <OrdersPage /> },
+      { path: 'orders/new',  element: <NewOrderPage /> },
       { path: 'orders/:id',  element: <OrderDetailPage /> },
       { path: 'billing',     element: <BillingPage /> },
       { path: 'billing/:id', element: <BillingDetailPage /> },
       { path: 'reports',     element: <ReportsPage /> },
       { path: 'users',       element: <RequireSuperAdmin><UsersPage /></RequireSuperAdmin> },
+      { path: 'deliveries',  element: <DeliveriesPage /> },
     ],
   },
   {

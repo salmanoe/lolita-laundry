@@ -69,8 +69,8 @@ interface OrderJpaRepository extends JpaRepository<OrderJpaEntity, Long> {
             SELECT o FROM OrderJpaEntity o
             WHERE (:clientId is null or o.clientId = :clientId)
               AND (:status   is null or o.status   = :status)
-              AND (:from     is null or o.orderDate >= :from)
-              AND (:to       is null or o.orderDate <= :to)
+              AND (cast(:from as LocalDate) is null or o.orderDate >= :from)
+              AND (cast(:to   as LocalDate) is null or o.orderDate <= :to)
             """)
     Page<OrderJpaEntity> search(
             @Param("clientId") Long clientId,

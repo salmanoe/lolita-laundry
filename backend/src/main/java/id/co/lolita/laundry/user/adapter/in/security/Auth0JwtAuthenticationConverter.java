@@ -17,10 +17,10 @@ import java.util.List;
  *
  * <p>Loads the user's role from our {@code users} table via the Auth0 {@code sub} claim,
  * so that role-based access control ({@code @PreAuthorize}) works with our business roles
- * (OWNER / STAFF) rather than Auth0-defined roles.
+ * (SUPER_ADMIN / FINANCE_STAFF / DAILY_STAFF) rather than Auth0-defined roles.
  *
  * <p>If the {@code sub} is not in our table, authentication succeeds but the token carries
- * no granted authorities — effectively read-only until the OWNER provisions the user.
+ * no granted authorities — effectively read-only until a SUPER_ADMIN provisions the user.
  */
 @Component
 @RequiredArgsConstructor

@@ -18,7 +18,7 @@ interface Props {
   entry?: User // undefined → create mode
 }
 
-const ROLES: Role[] = ['SUPER_ADMIN', 'OWNER', 'STAFF', 'DRIVER']
+const ROLES: Role[] = ['SUPER_ADMIN', 'FINANCE_STAFF', 'DAILY_STAFF']
 
 const field =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
@@ -37,7 +37,7 @@ export default function UserFormModal({ open, onClose, entry }: Props) {
     values: {
       auth0Sub: entry?.auth0Sub ?? '',
       fullName: entry?.fullName ?? '',
-      role: entry?.role ?? 'STAFF',
+      role: entry?.role ?? 'DAILY_STAFF',
     },
   })
 

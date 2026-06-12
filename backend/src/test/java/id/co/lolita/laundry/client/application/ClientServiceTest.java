@@ -130,14 +130,4 @@ class ClientServiceTest {
                 .containsExactly("Room Linen");
     }
 
-    @Test
-    void getClientByToken_rejectsInactiveClient() {
-        var token = UUID.randomUUID();
-        var inactive = new Client(1L, "X", "X", TYPE_ID, BillingMode.COMBINED,
-                null, null, null, token, false, null);
-        when(clientRepository.findByOrderToken(token)).thenReturn(Optional.of(inactive));
-
-        assertThatThrownBy(() -> service.getClientByToken(token))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
 }

@@ -25,7 +25,7 @@ class ItemController {
     private final GetItemsUseCase getItems;
     private final ManageItemUseCase manageItem;
 
-    // Item management screen is SUPER_ADMIN-only (the paginated list backs ItemsPage). OWNER/STAFF
+    // Item management screen is SUPER_ADMIN-only (the paginated list backs ItemsPage). FINANCE_STAFF
     // still resolve item names/units through /options for orders and price-setting.
     @GetMapping
     @PreAuthorize("hasRole('SUPER_ADMIN')")
@@ -43,7 +43,7 @@ class ItemController {
      * Unpaged list of active items for selection dropdowns (e.g. setting a client price).
      */
     @GetMapping("/options")
-    @PreAuthorize("hasAnyRole('OWNER', 'STAFF', 'SUPER_ADMIN')")
+    @PreAuthorize("hasAnyRole('DAILY_STAFF', 'FINANCE_STAFF', 'SUPER_ADMIN')")
     List<ItemResponse> listItemOptions() {
         return getItems.getActiveItems().stream().map(ItemResponse::from).toList();
     }
