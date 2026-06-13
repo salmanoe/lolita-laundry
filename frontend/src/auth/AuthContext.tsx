@@ -84,6 +84,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         redirect_uri: window.location.origin,
         audience,
         scope: 'openid profile email',
+        // Render the Auth0 Universal Login in Bahasa Indonesia (the app's language).
+        // Requires Indonesian to be enabled on the Auth0 tenant (Settings → Languages).
+        ui_locales: 'id',
       }}
       // Persist the session across reloads (default 'memory' loses it on refresh,
       // which can re-trigger the login redirect) and use refresh tokens for renewal.
