@@ -26,9 +26,10 @@ spring:
 #   dev  → DevSecurityConfig (permit all)
 #   prod → SecurityConfig    (Auth0 JWT required, see application-prod.yaml issuer-uri)
 #
-# To exercise REAL Auth0 JWT validation locally, run with the prod profile instead
-# (SPRING_PROFILES_ACTIVE=prod) and supply the prod env vars. The Auth0 tenant is:
-#   issuer-uri: https://dev-orcxwn2q35kltpyb.us.auth0.com/
+# To exercise REAL Auth0 JWT validation locally, run with the authdev profile instead
+# (SPRING_PROFILES_ACTIVE=authdev) — same local Postgres/MinIO + dev seed, but real
+# Auth0 JWT validation. The single Auth0 tenant (used for both dev and prod) is:
+#   issuer-uri: https://lolita-laundry.jp.auth0.com/
 
 # Cloudflare R2 → MinIO in dev (S3-compatible, same code)
 app:

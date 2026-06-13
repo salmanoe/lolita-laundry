@@ -22,7 +22,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: https://dev-orcxwn2q35kltpyb.us.auth0.com/
+          issuer-uri: https://lolita-laundry.jp.auth0.com/
           audiences: https://api.lolita-laundry.com
 
 # Storage → MinIO (same as dev)
