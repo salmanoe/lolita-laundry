@@ -26,6 +26,15 @@ export interface User {
   createdAt: string
 }
 
+/** A self-registered identity awaiting approval — mirrors PendingUserResponse ("Permintaan Akses"). */
+export interface PendingUser {
+  id:          number
+  auth0Sub:    string
+  email:       string | null
+  fullName:    string | null
+  requestedAt: string   // ISO instant
+}
+
 /** Paged list response — mirrors the backend shared.Page record. `page` is 0-based. */
 export interface Page<T> {
   content: T[]

@@ -4,6 +4,7 @@ import { apiFetch, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import UserFormModal from '../components/UserFormModal'
+import PendingAccessRequests from '../components/PendingAccessRequests'
 import { roleBadge, roleLabel } from '../lib/labels'
 import type { User } from '../types/api'
 
@@ -50,7 +51,7 @@ export default function UsersPage() {
         <div>
           <h1 className="text-xl font-semibold text-gray-800">Pengguna</h1>
           <p className="text-sm text-gray-500">
-            Kelola staf dan pengantar yang dapat masuk ke sistem. Buat akun di Auth0 lebih dulu, lalu daftarkan di sini.
+            Kelola staf yang dapat masuk ke sistem. Pengguna baru cukup masuk lewat Auth0, lalu setujui permintaannya di bawah.
           </p>
         </div>
         <button
@@ -60,6 +61,8 @@ export default function UsersPage() {
           + Tambah
         </button>
       </div>
+
+      <PendingAccessRequests />
 
       {(data?.length ?? 0) > 8 && (
         <input

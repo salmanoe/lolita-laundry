@@ -1,6 +1,8 @@
 package id.co.lolita.laundry.user.adapter.in.web;
 
+import id.co.lolita.laundry.user.adapter.in.web.dto.ApprovePendingRequest;
 import id.co.lolita.laundry.user.adapter.in.web.dto.CreateUserRequest;
+import id.co.lolita.laundry.user.adapter.in.web.dto.PendingUserResponse;
 import id.co.lolita.laundry.user.adapter.in.web.dto.SetActiveRequest;
 import id.co.lolita.laundry.user.adapter.in.web.dto.UpdateUserRequest;
 import id.co.lolita.laundry.user.adapter.in.web.dto.UserResponse;
@@ -49,5 +51,23 @@ class UserAdminController {
     @PatchMapping("/{id}/status")
     UserResponse setActive(@PathVariable Long id, @Valid @RequestBody SetActiveRequest request) {
         return UserResponse.from(users.setActive(id, request.active()));
+    }
+
+    // ── Pending self-registrations ("Permintaan Akses") ─────────────────────────
+
+    @GetMapping("/pending")
+    List<PendingUserResponse> listPending() {
+        return users.listPending().stream().map(PendingUserResponse::from).toList();
+    }
+
+    @PostMapping("/pending/{id}/approve")
+    UserResponse approve(@PathVariable Long id, @Valid @RequestBody ApprovePendingRequest request) {
+        return UserResponse.from(users.approve(id, request.role()));
+    }
+
+    @DeleteMapping("/pending/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void rejectPending(@PathVariable Long id) {
+        users.rejectPending(id);
     }
 }

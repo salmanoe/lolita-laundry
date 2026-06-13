@@ -1,23 +1,55 @@
+import { useEffect, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
+import { apiFetch } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import Layout from './Layout'
 import OperatorLayout from './OperatorLayout'
+import PendingApprovalScreen from '../pages/PendingApprovalScreen'
 
 /**
  * Picks the app chrome by role for the authenticated route tree:
  * - DAILY_STAFF → the minimal {@link OperatorLayout} (Buat Order / Order / Pengantaran). They manage
  *   orders fully (create / edit / advance / cancel), so order-detail (`/orders/{id}`) is allowed too;
  *   anything outside the order + delivery screens redirects back to Buat Order.
- * - everyone else (FINANCE_STAFF / SUPER_ADMIN / unresolved dev role) → the admin {@link Layout}.
+ * - everyone else (FINANCE_STAFF / SUPER_ADMIN) → the admin {@link Layout}.
+ *
+ * Unprovisioned identity (GET /api/me → 204): with real Auth0, self-register the caller into the
+ * pending queue (once) and show {@link PendingApprovalScreen} until a SUPER_ADMIN assigns a role. In
+ * mock/dev mode (VITE_AUTH_MOCK=true) the null role still falls open to the admin Layout, unchanged.
  *
  * The backend @PreAuthorize is the real enforcement; this is UX (don't render dead/403 screens).
  */
 const dailyStaffAllowed = (path: string) =>
   path === '/orders' || path === '/orders/new' || path === '/deliveries' || /^\/orders\/\d+$/.test(path)
 
+const isMock = import.meta.env.VITE_AUTH_MOCK === 'true'
+
 export default function RoleLayout() {
   const meQ = useMe()
   const location = useLocation()
+  const { user, getAccessTokenSilently } = useAuth()
+  const registered = useRef(false)
+
+  const unprovisioned = !meQ.isLoading && meQ.data == null
+
+  // First login with real Auth0: queue this identity for SUPER_ADMIN approval (idempotent, fire once).
+  useEffect(() => {
+    if (isMock || !unprovisioned || registered.current) return
+    registered.current = true
+    void (async () => {
+      try {
+        const token = await getAccessTokenSilently()
+        await apiFetch('/api/me/register', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ email: user?.email ?? null, fullName: user?.name ?? null }),
+        })
+      } catch {
+        // Best-effort: if it fails the admin won't see them this time, but the next login retries.
+      }
+    })()
+  }, [unprovisioned, user, getAccessTokenSilently])
 
   if (meQ.isLoading) {
     return (
@@ -25,6 +57,10 @@ export default function RoleLayout() {
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
       </div>
     )
+  }
+
+  if (unprovisioned && !isMock) {
+    return <PendingApprovalScreen />
   }
 
   if (meQ.data?.role === 'DAILY_STAFF') {

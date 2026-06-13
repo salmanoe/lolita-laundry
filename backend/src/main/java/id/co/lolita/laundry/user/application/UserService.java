@@ -1,11 +1,14 @@
 package id.co.lolita.laundry.user.application;
 
 import id.co.lolita.laundry.shared.NotFoundException;
+import id.co.lolita.laundry.user.domain.PendingUser;
 import id.co.lolita.laundry.user.domain.Role;
 import id.co.lolita.laundry.user.domain.User;
 import id.co.lolita.laundry.user.domain.port.in.LoadUserByAuth0SubUseCase;
 import id.co.lolita.laundry.user.domain.port.in.ManageUserUseCase;
+import id.co.lolita.laundry.user.domain.port.in.SelfRegisterUseCase;
 import id.co.lolita.laundry.user.domain.port.in.UserDirectoryQuery;
+import id.co.lolita.laundry.user.domain.port.out.PendingUserRepository;
 import id.co.lolita.laundry.user.domain.port.out.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,9 +20,11 @@ import java.util.Optional;
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
-class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, ManageUserUseCase {
+class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, ManageUserUseCase,
+        SelfRegisterUseCase {
 
     private final UserRepository userRepository;
+    private final PendingUserRepository pendingUserRepository;
 
     @Override
     public Optional<User> loadByAuth0Sub(String auth0Sub) {
@@ -72,6 +77,72 @@ class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, Mana
             user.deactivate();
         }
         return userRepository.save(user);
+    }
+
+    @Override
+    @Transactional
+    public void selfRegister(String auth0Sub, String email, String fullName) {
+        var sub = auth0Sub == null ? "" : auth0Sub.trim();
+        if (sub.isEmpty()) {
+            throw new IllegalArgumentException("Auth0 sub wajib diisi");
+        }
+        // Already a real user → nothing to queue. Already queued → refresh the profile hints.
+        if (userRepository.existsByAuth0Sub(sub)) {
+            return;
+        }
+        var pending = pendingUserRepository.findByAuth0Sub(sub)
+                .map(existing -> new PendingUser(existing.id(), sub, trimToNull(email), trimToNull(fullName),
+                        existing.requestedAt()))
+                .orElseGet(() -> PendingUser.of(sub, email, fullName));
+        pendingUserRepository.save(pending);
+    }
+
+    @Override
+    public List<PendingUser> listPending() {
+        return pendingUserRepository.findAll();
+    }
+
+    @Override
+    @Transactional
+    public User approve(Long pendingId, Role role) {
+        var pending = pendingUserRepository.findById(pendingId)
+                .orElseThrow(() -> new NotFoundException("Permintaan akses tidak ditemukan: " + pendingId));
+        if (userRepository.existsByAuth0Sub(pending.auth0Sub())) {
+            // Defensive: someone provisioned this sub manually in the meantime. Clear the stale request.
+            pendingUserRepository.deleteById(pendingId);
+            throw new IllegalArgumentException("Pengguna dengan Auth0 sub ini sudah terdaftar");
+        }
+        var user = userRepository.save(
+                User.register(pending.auth0Sub(), approvedName(pending), role));
+        pendingUserRepository.deleteById(pendingId);
+        return user;
+    }
+
+    @Override
+    @Transactional
+    public void rejectPending(Long pendingId) {
+        if (pendingUserRepository.findById(pendingId).isEmpty()) {
+            throw new NotFoundException("Permintaan akses tidak ditemukan: " + pendingId);
+        }
+        pendingUserRepository.deleteById(pendingId);
+    }
+
+    /**
+     * A user row needs a non-blank name; fall back to email then sub when the profile gave none.
+     */
+    private static String approvedName(PendingUser pending) {
+        if (pending.fullName() != null) {
+            return pending.fullName();
+        }
+        return pending.email() != null ? pending.email() : pending.auth0Sub();
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        var trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private User load(Long id) {
