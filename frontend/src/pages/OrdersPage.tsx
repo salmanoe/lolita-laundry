@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { apiFetch } from '../api/client'
+import { apiFetch, asArray } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import Pagination from '../components/Pagination'
@@ -31,7 +31,8 @@ export default function OrdersPage() {
     queryFn: async () =>
       apiFetch<ClientOption[]>('/api/clients/options', { token: await getAccessTokenSilently() }),
   })
-  const clientsById = new Map((clientsQ.data ?? []).map((c) => [c.id, c]))
+  const clients = asArray<ClientOption>(clientsQ.data)
+  const clientsById = new Map(clients.map((c) => [c.id, c]))
 
   const params = new URLSearchParams({ page: String(page), size: String(SIZE) })
   if (clientId !== '') params.set('clientId', String(clientId))
@@ -69,7 +70,7 @@ export default function OrdersPage() {
           className={filterCls}
         >
           <option value="">Semua Klien</option>
-          {(clientsQ.data ?? []).map((c) => (
+          {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
