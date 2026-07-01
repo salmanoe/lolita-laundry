@@ -141,7 +141,7 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     public List<CurrentPrice> getCurrentPrices(Long clientId) {
         Map<Long, Long> deptByItem = itemDepartmentRepository.findByClient(clientId).stream()
                 .collect(Collectors.toMap(ClientItemDepartment::itemId, ClientItemDepartment::departmentId));
-        return priceListRepository.findCurrentPrices(clientId).stream()
+        return priceListRepository.findCurrentPrices(clientId, LocalDate.now()).stream()
                 .map(p -> new CurrentPrice(p.itemId(), p.pricePerUnit(), p.effectiveDate(),
                         deptByItem.get(p.itemId())))
                 .toList();
@@ -244,7 +244,7 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
 
     @Override
     public List<PricePoint> currentPrices(Long clientId) {
-        return priceListRepository.findCurrentPrices(clientId).stream()
+        return priceListRepository.findCurrentPrices(clientId, LocalDate.now()).stream()
                 .map(p -> new PricePoint(p.itemId(), p.pricePerUnit()))
                 .toList();
     }
