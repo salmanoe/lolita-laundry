@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ApiError, apiFetch } from '../api/client'
+import { ApiError, apiFetch, asArray } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import OrderItemPicker, { toLineItems, type QuantityMap } from '../components/OrderItemPicker'
 import type { ClientOption, Order, OrderForm } from '../types/api'
@@ -26,6 +26,7 @@ export default function NewOrderPage() {
     queryKey: ['clients', 'options'],
     queryFn: async () => apiFetch<ClientOption[]>('/api/clients/options', { token: await token() }),
   })
+  const clients = asArray<ClientOption>(clientsQ.data)
 
   const formQ = useQuery({
     queryKey: ['order-form', clientId],
@@ -83,7 +84,7 @@ export default function NewOrderPage() {
     clientId !== '' && submittedByName.trim().length > 0 && lines.length > 0 && !submit.isPending
 
   if (confirmed) {
-    const clientName = clientsQ.data?.find((c) => c.id === clientId)?.name ?? form?.clientName
+    const clientName = clients.find((c) => c.id === clientId)?.name ?? form?.clientName
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
@@ -115,7 +116,7 @@ export default function NewOrderPage() {
         <Field label="Hotel / Klien" required>
           <select value={clientId} onChange={(e) => changeClient(e.target.value)} className={inputCls}>
             <option value="">— Pilih hotel —</option>
-            {(clientsQ.data ?? []).map((c) => (
+            {clients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>

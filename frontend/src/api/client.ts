@@ -55,3 +55,19 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
 
   return response.json() as Promise<T>
 }
+
+/**
+ * Coerce a list endpoint's response into an array.
+ *
+ * A `List<T>` endpoint should serialize to a JSON array, but a misconfigured backend/proxy can
+ * hand back a Spring `Page` wrapper (`{ content: [...] }`) or some other object. A non-array
+ * slips past `?? []` (which only catches null/undefined) and then blows up the whole page at
+ * `.map`/`.find`. This guard recovers a `{ content }` page shape and otherwise degrades to `[]`.
+ */
+export function asArray<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[]
+  if (data && typeof data === 'object' && Array.isArray((data as { content?: unknown }).content)) {
+    return (data as { content: T[] }).content
+  }
+  return []
+}

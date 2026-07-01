@@ -16,8 +16,8 @@ class ClientPriceListJpaAdapter implements ClientPriceListRepository {
     private final ClientPriceListJpaRepository jpaRepository;
 
     @Override
-    public List<ClientPriceList> findCurrentPrices(Long clientId) {
-        return jpaRepository.findCurrentPrices(clientId).stream()
+    public List<ClientPriceList> findCurrentPrices(Long clientId, LocalDate asOf) {
+        return jpaRepository.findCurrentPrices(clientId, asOf).stream()
                 .map(ClientPriceListJpaEntity::toDomain).toList();
     }
 

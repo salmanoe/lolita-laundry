@@ -15,8 +15,10 @@ interface ClientPriceListJpaRepository extends JpaRepository<ClientPriceListJpaE
             Long clientId, Long itemId, LocalDate effectiveDate);
 
     /**
-     * Current effective price for every item for a client.
-     * Uses a subquery to pick the latest row per (client, item) pair as of today.
+     * Current effective price for every item for a client, as of the given date.
+     * Uses a subquery to pick the latest row per (client, item) pair with effectiveDate <= asOf.
+     * The caller supplies asOf (the Indonesian calendar date) rather than relying on the DB clock,
+     * so the result never depends on the Postgres session timezone.
      */
     @Query("""
             SELECT p FROM ClientPriceListJpaEntity p
@@ -26,11 +28,12 @@ interface ClientPriceListJpaRepository extends JpaRepository<ClientPriceListJpaE
                   FROM ClientPriceListJpaEntity p2
                   WHERE p2.clientId = p.clientId
                     AND p2.itemId = p.itemId
-                    AND p2.effectiveDate <= CURRENT_DATE
+                    AND p2.effectiveDate <= :asOf
               )
             ORDER BY p.itemId
             """)
-    List<ClientPriceListJpaEntity> findCurrentPrices(@Param("clientId") Long clientId);
+    List<ClientPriceListJpaEntity> findCurrentPrices(@Param("clientId") Long clientId,
+                                                     @Param("asOf") LocalDate asOf);
 
     /**
      * Effective price for a specific item on a specific date.

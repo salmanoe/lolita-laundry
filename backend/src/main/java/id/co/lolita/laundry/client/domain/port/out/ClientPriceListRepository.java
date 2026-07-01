@@ -8,9 +8,9 @@ import java.util.Optional;
 
 public interface ClientPriceListRepository {
     /**
-     * Returns current effective prices for all items for a given client (as of today).
+     * Returns current effective prices for all items for a given client, as of the given date.
      */
-    List<ClientPriceList> findCurrentPrices(Long clientId);
+    List<ClientPriceList> findCurrentPrices(Long clientId, LocalDate asOf);
 
     /**
      * Returns the effective price for a specific item on a specific date (used at order creation).
