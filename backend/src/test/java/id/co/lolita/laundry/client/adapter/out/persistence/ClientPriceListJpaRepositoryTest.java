@@ -70,11 +70,24 @@ class ClientPriceListJpaRepositoryTest {
         repository.save(price(20, "3000", today.minusMonths(3)));
         repository.save(price(30, "9999", today.plusYears(1)));     // future — must be excluded
 
-        var current = repository.findCurrentPrices(CLIENT);
+        var current = repository.findCurrentPrices(CLIENT, today);
 
         assertThat(current).hasSize(2);
         assertThat(current).extracting(ClientPriceListJpaEntity::getItemId).containsExactly(10L, 20L);
         assertThat(current.get(0).getPricePerUnit()).isEqualByComparingTo("7000");
         assertThat(current.get(1).getPricePerUnit()).isEqualByComparingTo("3000");
+    }
+
+    @Test
+    void findCurrentPrices_includesRowEffectiveToday() {
+        var today = LocalDate.now();
+        repository.save(price(10, "5000", today.minusMonths(1)));
+        repository.save(price(10, "7000", today));   // effective today — must be the current price
+
+        var current = repository.findCurrentPrices(CLIENT, today);
+
+        assertThat(current).hasSize(1);
+        assertThat(current.get(0).getItemId()).isEqualTo(10L);
+        assertThat(current.get(0).getPricePerUnit()).isEqualByComparingTo("7000");
     }
 }
