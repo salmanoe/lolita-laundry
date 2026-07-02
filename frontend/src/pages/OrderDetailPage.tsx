@@ -5,6 +5,7 @@ import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import EditOrderModal from '../components/EditOrderModal'
+import { openDownloadUrl } from '../lib/download'
 import { nextAdvanceStatus, orderStatusBadge, orderStatusLabel } from '../lib/labels'
 import type {
   Client,
@@ -87,6 +88,14 @@ export default function OrderDetailPage() {
     onSuccess: ({ pdfUrl }) => window.open(pdfUrl, '_blank', 'noopener'),
   })
 
+  // "Unduh": same invoice, but a download-disposition URL — reliable on mobile where inline
+  // preview is flaky. Preview stays available via the button above (nothing lost).
+  const downloadInvoice = useMutation({
+    mutationFn: async () =>
+      apiFetch<OrderInvoice>(`/api/orders/${orderId}/invoice?download=true`, { token: await token() }),
+    onSuccess: ({ pdfUrl }) => openDownloadUrl(pdfUrl),
+  })
+
   if (orderQ.isLoading) return <div className="text-sm text-gray-400">Memuat order...</div>
   if (orderQ.error || !order) return <div className="text-sm text-red-500">Gagal memuat order.</div>
 
@@ -121,13 +130,22 @@ export default function OrderDetailPage() {
               </button>
             )}
             {order.status !== 'CANCELLED' && !isDailyStaff && (
-              <button
-                onClick={() => openInvoice.mutate()}
-                disabled={openInvoice.isPending}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {openInvoice.isPending ? 'Membuka…' : 'Lihat Invoice'}
-              </button>
+              <>
+                <button
+                  onClick={() => openInvoice.mutate()}
+                  disabled={openInvoice.isPending}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {openInvoice.isPending ? 'Membuka…' : 'Lihat Invoice'}
+                </button>
+                <button
+                  onClick={() => downloadInvoice.mutate()}
+                  disabled={downloadInvoice.isPending}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {downloadInvoice.isPending ? 'Mengunduh…' : 'Unduh'}
+                </button>
+              </>
             )}
             {order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
               <button
@@ -163,6 +181,11 @@ export default function OrderDetailPage() {
               : openInvoice.error instanceof ApiError
                 ? openInvoice.error.detail
                 : 'Gagal membuka invoice.'}
+          </p>
+        )}
+        {downloadInvoice.error && (
+          <p className="mt-2 text-sm text-red-500">
+            {downloadInvoice.error instanceof ApiError ? downloadInvoice.error.detail : 'Gagal mengunduh invoice.'}
           </p>
         )}
         {cancel.error && (

@@ -6,6 +6,7 @@ import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
 import id.co.lolita.laundry.order.domain.port.in.*;
 import id.co.lolita.laundry.order.domain.port.out.*;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
+import id.co.lolita.laundry.order.domain.port.out.billing.BillingStatusPort;
 import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import id.co.lolita.laundry.shared.Page;
@@ -50,6 +51,7 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     private final PricingGateway pricingGateway;
     private final CatalogGateway catalogGateway;
     private final PhotoStoragePort photoStorage;
+    private final BillingStatusPort billingStatus;
     private final ApplicationEventPublisher eventPublisher;
     // Self-reference so the order-number retry can re-enter a fresh transaction per attempt
     // (a plain this.* call would bypass the @Transactional proxy). Lazy → no init cycle.
@@ -158,15 +160,29 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     @Transactional
     public Order updateOrder(UpdateOrderCommand command) {
         var order = loadOrder(command.orderId());
+
+        // SUPER_ADMIN order-date correction. Rejected once the order sits on an ISSUED/PAID billing:
+        // that invoice has already gone to the client and must not be retroactively moved to another
+        // period. (Controller gates this to SUPER_ADMIN; only reached when the date actually changes.)
+        boolean dateChanged = command.orderDate() != null && !command.orderDate().equals(order.getOrderDate());
+        if (dateChanged && billingStatus.isOrderOnIssuedBilling(order.getId())) {
+            throw new IllegalArgumentException(
+                    "Tanggal order tidak dapat diubah karena order sudah masuk tagihan yang telah diterbitkan.");
+        }
+
+        // Price any supplied line items at the effective order date (the new date if it changed),
+        // so a re-submitted item list reflects the price list for that date. A date-only edit leaves
+        // the existing lines — and their frozen price snapshots — untouched.
+        var effectiveDate = command.orderDate() != null ? command.orderDate() : order.getOrderDate();
         List<Order.NewLine> lines = null;
         if (command.items() != null && !command.items().isEmpty()) {
             boolean perDepartment = clientGateway.findById(order.getClientId())
                     .map(ClientSnapshot::perDepartment).orElse(false);
-            lines = priceLines(order.getClientId(), perDepartment, order.getOrderDate(), command.items());
+            lines = priceLines(order.getClientId(), perDepartment, effectiveDate, command.items());
         }
-        order.edit(command.dueDate(), command.notes(), lines);
+        order.edit(command.orderDate(), command.dueDate(), command.notes(), lines);
         var saved = orderRepository.save(order);
-        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-price the billing line
+        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-price / re-home the billing line
         return saved;
     }
 

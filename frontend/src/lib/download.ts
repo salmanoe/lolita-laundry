@@ -28,6 +28,21 @@ export async function downloadAuthed(path: string, token: string, fallbackName: 
   URL.revokeObjectURL(url)
 }
 
+/**
+ * Triggers a browser save of a URL that already carries `Content-Disposition: attachment`
+ * (our pre-signed PDF download URLs do). We deliberately omit the `download` attribute — it is
+ * ignored for cross-origin URLs anyway — and rely on the server-sent disposition, which downloads
+ * reliably on mobile browsers where an inline PDF tab is flaky.
+ */
+export function openDownloadUrl(url: string): void {
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 function filenameFromDisposition(value: string | null): string | undefined {
   if (!value) return undefined
   // RFC 5987 form: filename*=UTF-8''Laporan-....xlsx

@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { openDownloadUrl } from '../lib/download'
 import { billingStatusBadge, billingStatusLabel, monthName, nextBillingStatus } from '../lib/labels'
 import type { Client, MonthlyBilling } from '../types/api'
 
@@ -46,6 +47,13 @@ export default function BillingDetailPage() {
     onSuccess: ({ url }) => window.open(url, '_blank', 'noopener'),
   })
 
+  // "Unduh": a download-disposition URL — reliable on mobile where inline preview is flaky.
+  const downloadPdf = useMutation({
+    mutationFn: async () =>
+      apiFetch<{ url: string }>(`/api/billing/${billingId}/pdf?download=true`, { token: await token() }),
+    onSuccess: ({ url }) => openDownloadUrl(url),
+  })
+
   if (billingQ.isLoading) return <div className="text-sm text-gray-400">Memuat tagihan...</div>
   if (billingQ.error || !billing) return <div className="text-sm text-red-500">Gagal memuat tagihan.</div>
 
@@ -66,13 +74,22 @@ export default function BillingDetailPage() {
           </div>
           <div className="flex gap-2">
             {billing.hasPdf && (
-              <button
-                onClick={() => openPdf.mutate()}
-                disabled={openPdf.isPending}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {openPdf.isPending ? 'Membuka…' : 'Lihat PDF'}
-              </button>
+              <>
+                <button
+                  onClick={() => openPdf.mutate()}
+                  disabled={openPdf.isPending}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {openPdf.isPending ? 'Membuka…' : 'Lihat PDF'}
+                </button>
+                <button
+                  onClick={() => downloadPdf.mutate()}
+                  disabled={downloadPdf.isPending}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {downloadPdf.isPending ? 'Mengunduh…' : 'Unduh'}
+                </button>
+              </>
             )}
             {next && (
               <button
@@ -93,6 +110,11 @@ export default function BillingDetailPage() {
         {openPdf.error && (
           <p className="mt-2 text-sm text-red-500">
             {openPdf.error instanceof ApiError ? openPdf.error.detail : 'Gagal membuka PDF.'}
+          </p>
+        )}
+        {downloadPdf.error && (
+          <p className="mt-2 text-sm text-red-500">
+            {downloadPdf.error instanceof ApiError ? downloadPdf.error.detail : 'Gagal mengunduh PDF.'}
           </p>
         )}
       </div>

@@ -96,9 +96,19 @@ class OrderController {
                          Authentication authentication) {
         var items = request.items() == null ? null
                 : request.items().stream().map(OrderLineRequest::toInput).toList();
+        // The order date is a SUPER_ADMIN-only correction; a lower role's orderDate is ignored
+        // server-side (defense in depth — the React form only shows the field to SUPER_ADMIN).
+        var orderDate = canEditOrderDate(authentication) ? request.orderDate() : null;
         return respond(
-                updateOrder.updateOrder(new UpdateOrderCommand(id, request.dueDate(), request.notes(), items)),
+                updateOrder.updateOrder(new UpdateOrderCommand(id, orderDate, request.dueDate(), request.notes(), items)),
                 authentication);
+    }
+
+    // Only SUPER_ADMIN may change the order date. In the dev profile (security disabled) there are
+    // no authorities, so we fail open — matching how the admin screens behave for an unresolved role.
+    private boolean canEditOrderDate(Authentication authentication) {
+        return authentication == null || authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
     }
 
     @PatchMapping("/{id}/status")

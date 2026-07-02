@@ -15,12 +15,19 @@ public interface GetBillingUseCase {
 
     MonthlyBilling getBilling(Long id);
 
-    /** Short-lived pre-signed URL to view a monthly billing PDF. 404 if not yet rendered. */
-    String getBillingPdfUrl(Long id);
+    /**
+     * Short-lived pre-signed URL to a monthly billing PDF. 404 if not yet rendered.
+     * {@code download=true} forces a browser save (the "Unduh" action, reliable on mobile);
+     * {@code false} serves it inline for preview.
+     */
+    String getBillingPdfUrl(Long id, boolean download);
 
     /** The per-order invoice for a delivered order. 404 if the order has no invoice yet. */
     OrderInvoice getInvoiceForOrder(Long orderId);
 
-    /** Short-lived pre-signed URL to view a per-order invoice PDF. */
-    String getInvoicePdfUrlForOrder(Long orderId);
+    /**
+     * Short-lived pre-signed URL to a per-order invoice PDF. {@code download=true} forces a
+     * browser save (reliable on mobile); {@code false} serves it inline for preview.
+     */
+    String getInvoicePdfUrlForOrder(Long orderId, boolean download);
 }

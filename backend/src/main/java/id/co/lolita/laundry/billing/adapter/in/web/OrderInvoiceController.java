@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -24,12 +25,14 @@ class OrderInvoiceController {
     private final CreateOrderInvoiceUseCase invoiceWriter;
 
     @GetMapping("/api/orders/{orderId}/invoice")
-    OrderInvoiceResponse get(@PathVariable Long orderId) {
+    OrderInvoiceResponse get(@PathVariable Long orderId,
+                            @RequestParam(defaultValue = "false") boolean download) {
         // Creates/refreshes the invoice on demand (live preview while open, frozen once
         // delivered), then returns metadata + a short-lived pre-signed URL. 404 for an unknown
-        // or canceled order.
+        // or canceled order. download=true → attachment disposition (the "Unduh" action, reliable
+        // on mobile) instead of an inline render.
         var invoice = invoiceWriter.prepareInvoiceForOrder(orderId);
-        var pdfUrl = billingQuery.getInvoicePdfUrlForOrder(orderId);
+        var pdfUrl = billingQuery.getInvoicePdfUrlForOrder(orderId, download);
         return OrderInvoiceResponse.from(invoice, pdfUrl);
     }
 }

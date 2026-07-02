@@ -83,8 +83,24 @@ class OrderTest {
     void edit_allowedWhileProcessing() {
         var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
         order.advanceStatus(OrderStatus.PROCESSING);
-        order.edit(LocalDate.now().plusDays(1), "updated", null);
+        order.edit(null, LocalDate.now().plusDays(1), "updated", null);
         assertThat(order.getNotes()).isEqualTo("updated");
+    }
+
+    @Test
+    void edit_changesOrderDateWhenProvided() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        var newDate = order.getOrderDate().minusDays(3);
+        order.edit(newDate, null, null, null);
+        assertThat(order.getOrderDate()).isEqualTo(newDate);
+    }
+
+    @Test
+    void edit_keepsOrderDateWhenNull() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        var original = order.getOrderDate();
+        order.edit(null, LocalDate.now().plusDays(1), "updated", null);
+        assertThat(order.getOrderDate()).isEqualTo(original);
     }
 
     @Test
@@ -92,7 +108,7 @@ class OrderTest {
         var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
         order.advanceStatus(OrderStatus.PROCESSING);
         order.advanceStatus(OrderStatus.DONE);
-        assertThatThrownBy(() -> order.edit(null, "x", null))
+        assertThatThrownBy(() -> order.edit(null, null, "x", null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

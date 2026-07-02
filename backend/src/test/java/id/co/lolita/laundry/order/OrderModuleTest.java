@@ -3,6 +3,7 @@ package id.co.lolita.laundry.order;
 import id.co.lolita.laundry.catalog.domain.port.in.CatalogQuery;
 import id.co.lolita.laundry.client.domain.port.in.ClientDirectoryQuery;
 import id.co.lolita.laundry.client.domain.port.in.ClientPricingQuery;
+import id.co.lolita.laundry.order.domain.port.out.billing.BillingStatusPort;
 import id.co.lolita.laundry.storage.domain.port.out.StoragePort;
 import id.co.lolita.laundry.user.domain.port.in.UserDirectoryQuery;
 import org.junit.jupiter.api.Test;
@@ -25,6 +26,8 @@ class OrderModuleTest {
     @MockitoBean CatalogQuery catalogQuery;
     @MockitoBean UserDirectoryQuery userDirectoryQuery;
     @MockitoBean StoragePort storagePort;
+    // Order-owned SPI implemented by the billing module (not started in this isolated test).
+    @MockitoBean BillingStatusPort billingStatusPort;
     @MockitoBean JwtDecoder jwtDecoder;
 
     @Test

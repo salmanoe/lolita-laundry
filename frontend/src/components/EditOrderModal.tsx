@@ -26,8 +26,11 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
   const token = async () => getAccessTokenSilently()
+  const role = useMe().data?.role
   // DAILY_STAFF are price-free: they edit quantities without seeing unit prices or totals.
-  const isDailyStaff = useMe().data?.role === 'DAILY_STAFF'
+  const isDailyStaff = role === 'DAILY_STAFF'
+  // Only SUPER_ADMIN may correct the order date (the backend ignores it from other roles).
+  const canEditOrderDate = role === 'SUPER_ADMIN'
 
   const itemsQ = useQuery({
     queryKey: ['items', 'options'],
@@ -50,6 +53,7 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
     [deptsQ.data],
   )
 
+  const [orderDate, setOrderDate] = useState(order.orderDate)
   const [dueDate, setDueDate] = useState(order.dueDate ?? '')
   const [notes, setNotes] = useState(order.notes ?? '')
   const [quantities, setQuantities] = useState<QuantityMap>(() =>
@@ -89,6 +93,9 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
         method: 'PUT',
         token: await token(),
         body: JSON.stringify({
+          // Only send orderDate when SUPER_ADMIN actually changed it; the backend ignores it
+          // from other roles anyway, but this keeps a no-op edit from touching the date.
+          orderDate: canEditOrderDate && orderDate !== order.orderDate ? orderDate : null,
           dueDate: dueDate || null,
           notes: notes.trim() || null,
           items: lines,
@@ -96,6 +103,8 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['order', order.id] })
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['billings'] })   // a date change re-homes the monthly billing
       onClose()
     },
   })
@@ -117,6 +126,15 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
 
         <div className="max-h-[70vh] space-y-5 overflow-y-auto px-6 py-5">
           <div className="grid gap-4 md:grid-cols-2">
+            {canEditOrderDate && (
+              <label className="block">
+                <span className="mb-1 block text-xs font-medium text-gray-500">Tanggal Order</span>
+                <input type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className={inputCls} />
+                <span className="mt-1 block text-[11px] text-gray-400">
+                  Nomor order tidak berubah. Tidak dapat diubah jika sudah masuk tagihan yang diterbitkan.
+                </span>
+              </label>
+            )}
             <label className="block">
               <span className="mb-1 block text-xs font-medium text-gray-500">Jatuh Tempo</span>
               <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />

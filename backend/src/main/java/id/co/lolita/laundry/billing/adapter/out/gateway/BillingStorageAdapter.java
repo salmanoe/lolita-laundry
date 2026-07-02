@@ -29,4 +29,9 @@ class BillingStorageAdapter implements BillingStoragePort {
     public String presignedUrl(String key, int expirySeconds) {
         return storage.generatePresignedUrl(key, expirySeconds);
     }
+
+    @Override
+    public String presignedUrl(String key, int expirySeconds, String downloadFilename) {
+        return storage.generatePresignedUrl(key, expirySeconds, downloadFilename);
+    }
 }

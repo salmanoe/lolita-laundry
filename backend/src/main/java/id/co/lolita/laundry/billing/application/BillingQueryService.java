@@ -39,8 +39,10 @@ class BillingQueryService implements GetBillingUseCase {
     }
 
     @Override
-    public String getBillingPdfUrl(Long id) {
-        return presign(getBilling(id).getPdfUrl(), "billing " + id);
+    public String getBillingPdfUrl(Long id, boolean download) {
+        var billing = getBilling(id);
+        return presign(billing.getPdfUrl(), "billing " + id,
+                download ? billing.getBillingNumber() + ".pdf" : null);
     }
 
     @Override
@@ -50,14 +52,18 @@ class BillingQueryService implements GetBillingUseCase {
     }
 
     @Override
-    public String getInvoicePdfUrlForOrder(Long orderId) {
-        return presign(getInvoiceForOrder(orderId).getPdfUrl(), "invoice of order " + orderId);
+    public String getInvoicePdfUrlForOrder(Long orderId, boolean download) {
+        var invoice = getInvoiceForOrder(orderId);
+        return presign(invoice.getPdfUrl(), "invoice of order " + orderId,
+                download ? invoice.getInvoiceNumber() + ".pdf" : null);
     }
 
-    private String presign(String key, String what) {
+    private String presign(String key, String what, String downloadFilename) {
         if (key == null || key.isBlank()) {
             throw new NotFoundException("No PDF available for " + what);
         }
-        return storage.presignedUrl(key, PDF_URL_TTL_SECONDS);
+        return downloadFilename == null
+                ? storage.presignedUrl(key, PDF_URL_TTL_SECONDS)
+                : storage.presignedUrl(key, PDF_URL_TTL_SECONDS, downloadFilename);
     }
 }
