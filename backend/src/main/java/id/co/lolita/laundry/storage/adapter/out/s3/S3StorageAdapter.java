@@ -37,14 +37,28 @@ class S3StorageAdapter implements StoragePort {
 
     @Override
     public String generatePresignedUrl(String key, int expirySeconds) {
-        var getRequest = GetObjectRequest.builder()
+        return presign(key, expirySeconds, null);
+    }
+
+    @Override
+    public String generatePresignedUrl(String key, int expirySeconds, String downloadFilename) {
+        return presign(key, expirySeconds, downloadFilename);
+    }
+
+    private String presign(String key, int expirySeconds, String downloadFilename) {
+        var getRequestBuilder = GetObjectRequest.builder()
                 .bucket(props.getBucket())
-                .key(key)
-                .build();
+                .key(key);
+        if (downloadFilename != null && !downloadFilename.isBlank()) {
+            // Signed into the URL → storage returns Content-Disposition: attachment, forcing a
+            // download (reliable on mobile) instead of an inline render.
+            getRequestBuilder.responseContentDisposition(
+                    "attachment; filename=\"" + downloadFilename + "\"");
+        }
 
         var presignRequest = GetObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(expirySeconds))
-                .getObjectRequest(getRequest)
+                .getObjectRequest(getRequestBuilder.build())
                 .build();
 
         return presigner.presignGetObject(presignRequest).url().toString();

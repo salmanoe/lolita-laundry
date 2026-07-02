@@ -22,7 +22,10 @@ public class Order {
     private final Long id;
     private final String orderNumber;
     private final Long clientId;
-    private final LocalDate orderDate;
+    // Not final: SUPER_ADMIN may correct the order date via edit(). The order NUMBER stays frozen
+    // (it is an identity referenced by the invoice number and billing lines), so a corrected date
+    // can legitimately differ from the yyyymmdd baked into the number.
+    private LocalDate orderDate;
     private LocalDate dueDate;
     private OrderStatus status;
     private final BigDecimal pricingMultiplier;   // 1.0 Reguler, 2.0 Treatment (PBS)
@@ -117,12 +120,17 @@ public class Order {
 
     /**
      * Edits an in-flight order. Line items, if supplied, are fully replaced and re-priced
-     * with the order's multiplier. Allowed only while {@code RECEIVED} or {@code PROCESSING}
-     * — once {@code DONE} or {@code DELIVERED} the order is locked.
+     * with the order's multiplier. A non-null {@code orderDate} overrides the order date
+     * (SUPER_ADMIN correction; caller-gated) — null leaves it unchanged. Allowed only while
+     * {@code RECEIVED} or {@code PROCESSING} — once {@code DONE} or {@code DELIVERED} the order
+     * is locked.
      */
-    public void edit(LocalDate dueDate, String notes, List<NewLine> lines) {
+    public void edit(LocalDate orderDate, LocalDate dueDate, String notes, List<NewLine> lines) {
         if (status != OrderStatus.RECEIVED && status != OrderStatus.PROCESSING) {
             throw new IllegalArgumentException("Order can only be edited while RECEIVED or PROCESSING");
+        }
+        if (orderDate != null) {
+            this.orderDate = orderDate;
         }
         this.dueDate = dueDate;
         this.notes = notes;

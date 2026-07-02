@@ -58,10 +58,12 @@ class BillingController {
     }
 
     @GetMapping("/{id}/pdf")
-    BillingPdfUrlResponse pdf(@PathVariable Long id) {
+    BillingPdfUrlResponse pdf(@PathVariable Long id,
+                             @RequestParam(defaultValue = "false") boolean download) {
         // Lazily render the PDF if a past storage outage left it unattached, then pre-sign it.
+        // download=true → attachment disposition (the "Unduh" action, reliable on mobile).
         generateBilling.ensurePdfForBilling(id);
-        return new BillingPdfUrlResponse(billingQuery.getBillingPdfUrl(id));
+        return new BillingPdfUrlResponse(billingQuery.getBillingPdfUrl(id, download));
     }
 
     @PatchMapping("/{id}/status")

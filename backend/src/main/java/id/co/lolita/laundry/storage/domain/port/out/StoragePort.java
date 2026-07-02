@@ -30,6 +30,18 @@ public interface StoragePort {
     String generatePresignedUrl(String key, int expirySeconds);
 
     /**
+     * As {@link #generatePresignedUrl(String, int)} but overrides the response
+     * {@code Content-Disposition} so the browser saves the object as a download named
+     * {@code downloadFilename} rather than rendering it inline. Used for the "Unduh" PDF action:
+     * an inline PDF tab is unreliable on mobile browsers, whereas an {@code attachment} disposition
+     * downloads consistently. Cross-origin-safe (the header is signed into the URL by storage), so
+     * it works against the pre-signed R2/MinIO URL without CORS.
+     *
+     * @param downloadFilename the filename the browser should save as (e.g. "INV-PBS-...-001.pdf")
+     */
+    String generatePresignedUrl(String key, int expirySeconds, String downloadFilename);
+
+    /**
      * Deletes an object. Used when an order is canceled before delivery.
      *
      * @param key object key to delete

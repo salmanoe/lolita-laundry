@@ -18,6 +18,7 @@ import id.co.lolita.laundry.order.domain.port.out.OrderRepository;
 import id.co.lolita.laundry.order.domain.port.out.OrderStatusHistoryRepository;
 import id.co.lolita.laundry.order.domain.port.out.PhotoStoragePort;
 import id.co.lolita.laundry.order.domain.port.out.PricingGateway;
+import id.co.lolita.laundry.order.domain.port.out.billing.BillingStatusPort;
 import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +70,8 @@ class OrderServiceTest {
     CatalogGateway catalogGateway;
     @Mock
     PhotoStoragePort photoStorage;
+    @Mock
+    BillingStatusPort billingStatus;
     @Mock
     ApplicationEventPublisher eventPublisher;
     @Mock

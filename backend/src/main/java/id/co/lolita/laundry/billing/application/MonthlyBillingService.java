@@ -238,6 +238,24 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
             var desired = portion.map(Portion::subtotal).orElse(BigDecimal.ZERO);
             var deptName = portion.map(Portion::departmentName).orElse(null);
 
+            // Order-date correction cleanup: when this order carries no frozen line for the
+            // department, it must live only on its natural-period bill. A SUPER_ADMIN order-date
+            // change can leave a stale DRAFT line in the *old* period — drop it so the order isn't
+            // double-billed. Guarded by "no frozen bill for this dept" so it never touches a
+            // legitimate rolled-forward adjustment (KI-3), which only exists alongside a frozen bill.
+            boolean onFrozenForDept = existing.stream()
+                    .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                    .anyMatch(b -> b.getStatus() != BillingStatus.DRAFT);
+            if (!onFrozenForDept) {
+                existing.stream()
+                        .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
+                        .filter(b -> b.getStatus() == BillingStatus.DRAFT)
+                        .filter(b -> !(b.getPeriodYear() == naturalYm.getYear()
+                                && b.getPeriodMonth() == naturalYm.getMonthValue()))
+                        .toList()
+                        .forEach(b -> dropOrderFrom(b, orderId));
+            }
+
             // The bill in the order's natural period for this department, if the order is on one.
             var naturalBill = existing.stream()
                     .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
