@@ -41,6 +41,7 @@ export default function UsersPage() {
     (u) =>
       !filtering ||
       u.fullName.toLowerCase().includes(term) ||
+      (u.email?.toLowerCase().includes(term) ?? false) ||
       u.auth0Sub.toLowerCase().includes(term) ||
       roleLabel[u.role].toLowerCase().includes(term),
   )
@@ -68,7 +69,7 @@ export default function UsersPage() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Cari nama, sub, atau peran..."
+          placeholder="Cari nama, email, sub, atau peran..."
           className="w-full max-w-xs rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
         />
       )}
@@ -91,7 +92,7 @@ export default function UsersPage() {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                {['Nama', 'Auth0 Sub', 'Peran', 'Status', ''].map((h) => (
+                {['Nama', 'Email', 'Auth0 Sub', 'Peran', 'Status', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-left font-medium text-gray-500">{h}</th>
                 ))}
               </tr>
@@ -105,6 +106,7 @@ export default function UsersPage() {
                       {u.fullName}
                       {isSelf && <span className="ml-2 text-xs font-normal text-gray-400">(Anda)</span>}
                     </td>
+                    <td className="px-4 py-3 text-gray-600">{u.email ?? <span className="text-gray-300">—</span>}</td>
                     <td className="px-4 py-3 font-mono text-xs text-gray-500">{u.auth0Sub}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${roleBadge[u.role]}`}>
@@ -142,7 +144,7 @@ export default function UsersPage() {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">
+                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-400">
                     {filtering ? 'Tidak ada hasil.' : 'Belum ada pengguna.'}
                   </td>
                 </tr>

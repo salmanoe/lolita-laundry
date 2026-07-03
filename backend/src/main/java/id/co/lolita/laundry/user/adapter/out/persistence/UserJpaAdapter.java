@@ -38,6 +38,11 @@ class UserJpaAdapter implements UserRepository {
     }
 
     @Override
+    public boolean existsByEmailIgnoreCase(String email) {
+        return jpaRepository.existsByEmailIgnoreCase(email);
+    }
+
+    @Override
     public User save(User user) {
         return jpaRepository.save(UserJpaEntity.fromDomain(user)).toDomain();
     }

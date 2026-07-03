@@ -14,5 +14,11 @@ public interface UserRepository {
 
     boolean existsByAuth0Sub(String auth0Sub);
 
+    /**
+     * True when any user already carries this email (case-insensitive). Used by the approval flow
+     * to spot a duplicate identity — the same person returning under a second Auth0 sub.
+     */
+    boolean existsByEmailIgnoreCase(String email);
+
     User save(User user);
 }

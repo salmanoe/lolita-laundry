@@ -44,7 +44,7 @@ class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, Mana
     @Override
     @Transactional
     public User create(CreateUserCommand command) {
-        var user = User.register(command.auth0Sub(), command.fullName(), command.role());
+        var user = User.register(command.auth0Sub(), null, command.fullName(), command.role());
         if (userRepository.existsByAuth0Sub(user.getAuth0Sub())) {
             throw new IllegalArgumentException("Pengguna dengan Auth0 sub ini sudah terdaftar");
         }
@@ -112,8 +112,19 @@ class UserService implements LoadUserByAuth0SubUseCase, UserDirectoryQuery, Mana
             pendingUserRepository.deleteById(pendingId);
             throw new IllegalArgumentException("Pengguna dengan Auth0 sub ini sudah terdaftar");
         }
+        // Duplicate-identity guard: this email already belongs to a provisioned user, so this pending
+        // request is the same person returning under a second Auth0 sub (e.g. Google vs email+password).
+        // Approving would create a users row for a sub they aren't logged in as → they'd stay stuck on
+        // the pending screen forever. Refuse and keep the request so the SUPER_ADMIN can reconcile the
+        // duplicate (link the Auth0 accounts / update the existing user's sub) instead of silently
+        // splitting the identity. The pending row is left in place on purpose (unlike the sub branch).
+        if (pending.email() != null && userRepository.existsByEmailIgnoreCase(pending.email())) {
+            throw new IllegalArgumentException(
+                    "Email " + pending.email() + " sudah dipakai pengguna lain — kemungkinan akun login ganda "
+                            + "(Google + email/kata sandi). Periksa daftar Pengguna dan satukan akunnya sebelum menyetujui.");
+        }
         var user = userRepository.save(
-                User.register(pending.auth0Sub(), approvedName(pending), role));
+                User.register(pending.auth0Sub(), pending.email(), approvedName(pending), role));
         pendingUserRepository.deleteById(pendingId);
         return user;
     }

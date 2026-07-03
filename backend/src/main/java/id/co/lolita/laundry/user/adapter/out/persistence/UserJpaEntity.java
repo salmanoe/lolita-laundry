@@ -23,6 +23,9 @@ class UserJpaEntity {
     @Column(name = "auth0_sub", nullable = false, unique = true, length = 128)
     private String auth0Sub;
 
+    @Column(name = "email", length = 160)
+    private String email;
+
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 
@@ -40,6 +43,7 @@ class UserJpaEntity {
         var entity = new UserJpaEntity();
         entity.id = user.getId();
         entity.auth0Sub = user.getAuth0Sub();
+        entity.email = user.getEmail();
         entity.fullName = user.getFullName();
         entity.role = user.getRole();
         entity.active = user.isActive();
@@ -48,6 +52,6 @@ class UserJpaEntity {
     }
 
     User toDomain() {
-        return new User(id, auth0Sub, fullName, role, active, createdAt);
+        return new User(id, auth0Sub, email, fullName, role, active, createdAt);
     }
 }
