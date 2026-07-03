@@ -1,5 +1,6 @@
 package id.co.lolita.laundry.order.adapter.out.persistence;
 
+import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,6 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -100,6 +102,33 @@ class OrderJpaRepositoryTest {
 
         assertThat(result).extracting(OrderJpaEntity::getOrderNumber)
                 .containsExactly("PBS-1", "AYI-1");
+    }
+
+    @Test
+    void save_persistsTreatmentCorrection_onUpdate() {
+        // Regression: the update path (applyScalars) must persist a corrected pricing_multiplier,
+        // not just the re-priced line subtotals — otherwise the order is left in an inconsistent
+        // state (multiplier 1.0 with ×2 subtotals). Round-trips through the real adapter.
+        var adapter = new OrderJpaAdapter(repository);
+        var created = adapter.save(Order.create(
+                "PBS-20260101-001", 6L, LocalDate.now(), null, BigDecimal.ONE, "Staff", null, null,
+                List.of(new Order.NewLine(1L, new BigDecimal("2"), new BigDecimal("1000"), 1L)),
+                Instant.now()));
+        assertThat(created.getPricingMultiplier()).isEqualByComparingTo("1.0");
+        assertThat(created.total()).isEqualByComparingTo("2000.00");
+
+        // Reload, flip Reguler → Treatment (×2) with no new item list, re-save.
+        var reloaded = adapter.findById(created.getId()).orElseThrow();
+        reloaded.edit(null, new BigDecimal("2.0"), null, null, null);
+        var saved = adapter.save(reloaded);
+
+        assertThat(saved.getPricingMultiplier()).isEqualByComparingTo("2.0");
+        assertThat(saved.total()).isEqualByComparingTo("4000.00");
+        // Fresh read from the DB confirms it persisted.
+        var fresh = adapter.findById(created.getId()).orElseThrow();
+        assertThat(fresh.getPricingMultiplier()).isEqualByComparingTo("2.0");
+        assertThat(fresh.getLineItems().getFirst().subtotal()).isEqualByComparingTo("4000.00");
+        assertThat(fresh.getLineItems().getFirst().priceAtOrder()).isEqualByComparingTo("1000");
     }
 
     @Test

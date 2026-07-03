@@ -83,7 +83,7 @@ class OrderTest {
     void edit_allowedWhileProcessing() {
         var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
         order.advanceStatus(OrderStatus.PROCESSING);
-        order.edit(null, LocalDate.now().plusDays(1), "updated", null);
+        order.edit(null, null, LocalDate.now().plusDays(1), "updated", null);
         assertThat(order.getNotes()).isEqualTo("updated");
     }
 
@@ -91,7 +91,7 @@ class OrderTest {
     void edit_changesOrderDateWhenProvided() {
         var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
         var newDate = order.getOrderDate().minusDays(3);
-        order.edit(newDate, null, null, null);
+        order.edit(newDate, null, null, null, null);
         assertThat(order.getOrderDate()).isEqualTo(newDate);
     }
 
@@ -99,8 +99,29 @@ class OrderTest {
     void edit_keepsOrderDateWhenNull() {
         var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
         var original = order.getOrderDate();
-        order.edit(null, LocalDate.now().plusDays(1), "updated", null);
+        order.edit(null, null, LocalDate.now().plusDays(1), "updated", null);
         assertThat(order.getOrderDate()).isEqualTo(original);
+    }
+
+    @Test
+    void edit_treatmentCorrection_reprisesExistingLinesWithoutNewLineList() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "3", "5000"));
+        assertThat(order.total()).isEqualByComparingTo("15000.00");
+
+        // Flip Reguler → Treatment (×2) with no new item list — existing lines re-price in place.
+        order.edit(null, new BigDecimal("2.0"), null, null, null);
+
+        assertThat(order.getPricingMultiplier()).isEqualByComparingTo("2.0");
+        assertThat(order.getLineItems().getFirst().priceAtOrder()).isEqualByComparingTo("5000");
+        assertThat(order.total()).isEqualByComparingTo("30000.00");
+    }
+
+    @Test
+    void edit_keepsMultiplierWhenNull() {
+        var order = newOrder(new BigDecimal("2.0"), line(10L, "3", "5000"));
+        order.edit(null, null, null, "note", null);
+        assertThat(order.getPricingMultiplier()).isEqualByComparingTo("2.0");
+        assertThat(order.total()).isEqualByComparingTo("30000.00");
     }
 
     @Test
@@ -108,7 +129,7 @@ class OrderTest {
         var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
         order.advanceStatus(OrderStatus.PROCESSING);
         order.advanceStatus(OrderStatus.DONE);
-        assertThatThrownBy(() -> order.edit(null, null, "x", null))
+        assertThatThrownBy(() -> order.edit(null, null, null, "x", null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

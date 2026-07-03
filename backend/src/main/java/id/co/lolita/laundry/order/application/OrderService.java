@@ -160,27 +160,38 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     @Transactional
     public Order updateOrder(UpdateOrderCommand command) {
         var order = loadOrder(command.orderId());
+        var client = clientGateway.findById(order.getClientId());
+        boolean perDepartment = client.map(ClientSnapshot::perDepartment).orElse(false);
 
-        // SUPER_ADMIN order-date correction. Rejected once the order sits on an ISSUED/PAID billing:
-        // that invoice has already gone to the client and must not be retroactively moved to another
-        // period. (Controller gates this to SUPER_ADMIN; only reached when the date actually changes.)
+        // SUPER_ADMIN Treatment correction. resolveMultiplier enforces the PER_DEPARTMENT-only gate
+        // (Treatment on a COMBINED client is rejected). null = leave the flag unchanged.
+        BigDecimal newMultiplier = command.treatment() == null ? null
+                : client.map(c -> resolveMultiplier(c, command.treatment()))
+                .orElseThrow(() -> new IllegalArgumentException("Client not found for order " + order.getId()));
+
+        // SUPER_ADMIN order-date / Treatment corrections. Rejected once the order sits on an
+        // ISSUED/PAID billing: that invoice has already gone to the client and must not be
+        // retroactively moved to another period or re-totalled. (Controller gates both to SUPER_ADMIN;
+        // only reached when the value actually changes.)
         boolean dateChanged = command.orderDate() != null && !command.orderDate().equals(order.getOrderDate());
-        if (dateChanged && billingStatus.isOrderOnIssuedBilling(order.getId())) {
-            throw new IllegalArgumentException(
-                    "Tanggal order tidak dapat diubah karena order sudah masuk tagihan yang telah diterbitkan.");
+        boolean treatmentChanged = newMultiplier != null
+                && newMultiplier.compareTo(order.getPricingMultiplier()) != 0;
+        if ((dateChanged || treatmentChanged) && billingStatus.isOrderOnIssuedBilling(order.getId())) {
+            throw new IllegalArgumentException(dateChanged
+                    ? "Tanggal order tidak dapat diubah karena order sudah masuk tagihan yang telah diterbitkan."
+                    : "Status treatment tidak dapat diubah karena order sudah masuk tagihan yang telah diterbitkan.");
         }
 
         // Price any supplied line items at the effective order date (the new date if it changed),
         // so a re-submitted item list reflects the price list for that date. A date-only edit leaves
-        // the existing lines — and their frozen price snapshots — untouched.
+        // the existing lines — and their frozen price snapshots — untouched. A Treatment-only change
+        // re-prices the existing lines inside Order.edit with the corrected multiplier.
         var effectiveDate = command.orderDate() != null ? command.orderDate() : order.getOrderDate();
         List<Order.NewLine> lines = null;
         if (command.items() != null && !command.items().isEmpty()) {
-            boolean perDepartment = clientGateway.findById(order.getClientId())
-                    .map(ClientSnapshot::perDepartment).orElse(false);
             lines = priceLines(order.getClientId(), perDepartment, effectiveDate, command.items());
         }
-        order.edit(command.orderDate(), command.dueDate(), command.notes(), lines);
+        order.edit(command.orderDate(), newMultiplier, command.dueDate(), command.notes(), lines);
         var saved = orderRepository.save(order);
         eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-price / re-home the billing line
         return saved;

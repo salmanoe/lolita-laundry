@@ -29,8 +29,10 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
   const role = useMe().data?.role
   // DAILY_STAFF are price-free: they edit quantities without seeing unit prices or totals.
   const isDailyStaff = role === 'DAILY_STAFF'
-  // Only SUPER_ADMIN may correct the order date (the backend ignores it from other roles).
+  // Only SUPER_ADMIN may correct the order date or the Treatment flag (the backend ignores both
+  // from other roles).
   const canEditOrderDate = role === 'SUPER_ADMIN'
+  const canCorrectTreatment = role === 'SUPER_ADMIN'
 
   const itemsQ = useQuery({
     queryKey: ['items', 'options'],
@@ -56,11 +58,18 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
   const [orderDate, setOrderDate] = useState(order.orderDate)
   const [dueDate, setDueDate] = useState(order.dueDate ?? '')
   const [notes, setNotes] = useState(order.notes ?? '')
+  const [treatment, setTreatment] = useState(order.pricingMultiplier > 1)
   const [quantities, setQuantities] = useState<QuantityMap>(() =>
     Object.fromEntries(order.lineItems.map((li) => [li.itemId, String(li.quantity)])),
   )
 
-  const multiplier = order.pricingMultiplier
+  // Treatment applies only to PER_DEPARTMENT clients (they have departments); the backend rejects
+  // it otherwise. An order already on Treatment is per-department by definition.
+  const treatmentApplicable = (deptsQ.data?.length ?? 0) > 0 || order.pricingMultiplier > 1
+  // Drive the price preview off the (possibly corrected) Treatment state — the multiplier is either
+  // ×1 (Reguler) or ×2 (Treatment).
+  const multiplier = treatment ? 2 : 1
+  const treatmentChanged = treatment !== (order.pricingMultiplier > 1)
 
   // Orderable items = those with a current price, plus any already on this order (so the
   // existing lines remain visible/editable even if their price entry has since changed).
@@ -93,9 +102,10 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
         method: 'PUT',
         token: await token(),
         body: JSON.stringify({
-          // Only send orderDate when SUPER_ADMIN actually changed it; the backend ignores it
-          // from other roles anyway, but this keeps a no-op edit from touching the date.
+          // Only send orderDate/treatment when SUPER_ADMIN actually changed them; the backend
+          // ignores them from other roles anyway, but this keeps a no-op edit from touching them.
           orderDate: canEditOrderDate && orderDate !== order.orderDate ? orderDate : null,
+          treatment: canCorrectTreatment && treatmentChanged ? treatment : null,
           dueDate: dueDate || null,
           notes: notes.trim() || null,
           items: lines,
@@ -144,6 +154,23 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
               <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opsional" className={inputCls} />
             </label>
           </div>
+
+          {canCorrectTreatment && treatmentApplicable && (
+            <label className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={treatment}
+                onChange={(e) => setTreatment(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-700">Treatment (harga ×2)</span>
+                <span className="mt-0.5 block text-[11px] text-gray-400">
+                  Koreksi untuk seluruh item order. Tidak dapat diubah jika sudah masuk tagihan yang telah diterbitkan.
+                </span>
+              </span>
+            </label>
+          )}
 
           <div>
             <p className="mb-2 text-sm font-semibold text-gray-700">Item</p>

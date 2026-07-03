@@ -89,6 +89,7 @@ class OrderJpaEntity {
     void applyScalars(Order o) {
         this.status = o.getStatus();
         this.orderDate = o.getOrderDate();   // editable by SUPER_ADMIN (the order number stays frozen)
+        this.pricingMultiplier = o.getPricingMultiplier();   // editable by SUPER_ADMIN (Treatment correction)
         this.dueDate = o.getDueDate();
         this.notes = o.getNotes();
     }

@@ -28,7 +28,11 @@ public class Order {
     private LocalDate orderDate;
     private LocalDate dueDate;
     private OrderStatus status;
-    private final BigDecimal pricingMultiplier;   // 1.0 Reguler, 2.0 Treatment (PBS)
+    // Not final: SUPER_ADMIN may correct the Treatment flag via edit() (a whole-order pricing
+    // correction). Changing it re-prices every existing line — the multiplier is baked into each
+    // OrderLineItem.subtotal — so a correction reshuffles the monthly billing exactly like a
+    // quantity edit does. 1.0 Reguler, 2.0 Treatment (PBS).
+    private BigDecimal pricingMultiplier;
     private final String submittedByName;
     private String notes;
     private final Long createdByUserId;    // nullable — null when submitted via public token
@@ -119,25 +123,40 @@ public class Order {
     }
 
     /**
-     * Edits an in-flight order. Line items, if supplied, are fully replaced and re-priced
-     * with the order's multiplier. A non-null {@code orderDate} overrides the order date
-     * (SUPER_ADMIN correction; caller-gated) — null leaves it unchanged. Allowed only while
-     * {@code RECEIVED} or {@code PROCESSING} — once {@code DONE} or {@code DELIVERED} the order
-     * is locked.
+     * Edits an in-flight order. Both {@code orderDate} and {@code pricingMultiplier} are
+     * SUPER_ADMIN corrections (caller-gated) — a non-null value overrides, null leaves it
+     * unchanged. Line items, if supplied, are fully replaced and re-priced with the (possibly
+     * corrected) multiplier. A Treatment correction with <em>no</em> new line list still
+     * re-prices the existing lines so their subtotals reflect the new multiplier. Allowed only
+     * while {@code RECEIVED} or {@code PROCESSING} — once {@code DONE} or {@code DELIVERED} the
+     * order is locked.
      */
-    public void edit(LocalDate orderDate, LocalDate dueDate, String notes, List<NewLine> lines) {
+    public void edit(LocalDate orderDate, BigDecimal pricingMultiplier, LocalDate dueDate,
+                     String notes, List<NewLine> lines) {
         if (status != OrderStatus.RECEIVED && status != OrderStatus.PROCESSING) {
             throw new IllegalArgumentException("Order can only be edited while RECEIVED or PROCESSING");
         }
         if (orderDate != null) {
             this.orderDate = orderDate;
         }
+        boolean multiplierChanged = pricingMultiplier != null
+                && pricingMultiplier.compareTo(this.pricingMultiplier) != 0;
+        if (pricingMultiplier != null) {
+            this.pricingMultiplier = pricingMultiplier;
+        }
         this.dueDate = dueDate;
         this.notes = notes;
         if (lines != null && !lines.isEmpty()) {
             this.lineItems.clear();
             lines.forEach(l -> this.lineItems.add(
-                    OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), l.departmentId(), pricingMultiplier)));
+                    OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), l.departmentId(), this.pricingMultiplier)));
+        } else if (multiplierChanged) {
+            // Treatment-only correction: no new line list, so re-price the existing lines in place
+            // with the corrected multiplier (price snapshots are preserved; only the subtotal changes).
+            var existing = List.copyOf(this.lineItems);
+            this.lineItems.clear();
+            existing.forEach(li -> this.lineItems.add(OrderLineItem.create(
+                    li.itemId(), li.quantity(), li.priceAtOrder(), li.departmentId(), this.pricingMultiplier)));
         }
     }
 

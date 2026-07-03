@@ -96,17 +96,22 @@ class OrderController {
                          Authentication authentication) {
         var items = request.items() == null ? null
                 : request.items().stream().map(OrderLineRequest::toInput).toList();
-        // The order date is a SUPER_ADMIN-only correction; a lower role's orderDate is ignored
-        // server-side (defense in depth — the React form only shows the field to SUPER_ADMIN).
-        var orderDate = canEditOrderDate(authentication) ? request.orderDate() : null;
+        // The order date and the Treatment flag are SUPER_ADMIN-only corrections; a lower role's
+        // values are ignored server-side (defense in depth — the React form only shows those fields
+        // to SUPER_ADMIN).
+        boolean superAdmin = canCorrectOrder(authentication);
+        var orderDate = superAdmin ? request.orderDate() : null;
+        var treatment = superAdmin ? request.treatment() : null;
         return respond(
-                updateOrder.updateOrder(new UpdateOrderCommand(id, orderDate, request.dueDate(), request.notes(), items)),
+                updateOrder.updateOrder(
+                        new UpdateOrderCommand(id, orderDate, treatment, request.dueDate(), request.notes(), items)),
                 authentication);
     }
 
-    // Only SUPER_ADMIN may change the order date. In the dev profile (security disabled) there are
-    // no authorities, so we fail open — matching how the admin screens behave for an unresolved role.
-    private boolean canEditOrderDate(Authentication authentication) {
+    // Only SUPER_ADMIN may correct the order date or the Treatment flag. In the dev profile (security
+    // disabled) there are no authorities, so we fail open — matching how the admin screens behave for
+    // an unresolved role.
+    private boolean canCorrectOrder(Authentication authentication) {
         return authentication == null || authentication.getAuthorities().stream()
                 .anyMatch(a -> "ROLE_SUPER_ADMIN".equals(a.getAuthority()));
     }

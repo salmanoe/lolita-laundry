@@ -10,6 +10,7 @@ import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderC
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.OrderLineInput;
 import id.co.lolita.laundry.order.domain.port.in.UpdateOrderStatusUseCase.AdvanceStatusCommand;
+import id.co.lolita.laundry.order.domain.port.in.UpdateOrderUseCase;
 import id.co.lolita.laundry.order.domain.port.out.CatalogGateway;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway;
 import id.co.lolita.laundry.order.domain.port.out.ClientGateway.ClientSnapshot;
@@ -383,6 +384,50 @@ class OrderServiceTest {
         verify(historyRepository).save(any());
         // Billing reacts to drop the canceled order from the bill.
         verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+    }
+
+    @Test
+    void updateOrder_treatmentCorrection_reprisesLines_andFiresBillingSync() {
+        // SUPER_ADMIN flips Reguler → Treatment on a per-department client's RECEIVED order.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(true)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(false);
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.updateOrder(new UpdateOrderUseCase.UpdateOrderCommand(
+                99L, null, true, null, null, null));
+
+        assertThat(result.getPricingMultiplier()).isEqualByComparingTo("2.0");
+        // Existing line (qty 1 × 5000) re-priced ×2, price snapshot untouched.
+        assertThat(result.getLineItems().getFirst().priceAtOrder()).isEqualByComparingTo("5000");
+        assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("10000.00");
+        verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+    }
+
+    @Test
+    void updateOrder_treatmentCorrection_rejectedWhenOnIssuedBilling() {
+        // The invoice already went to the client — a treatment change must not re-total it.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(true)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateOrder(new UpdateOrderUseCase.UpdateOrderCommand(
+                99L, null, true, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("treatment");
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    void updateOrder_rejectsTreatmentForCombinedClient() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+
+        assertThatThrownBy(() -> service.updateOrder(new UpdateOrderUseCase.UpdateOrderCommand(
+                99L, null, true, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Treatment");
+        verify(orderRepository, never()).save(any());
     }
 
     @Test
