@@ -20,6 +20,7 @@ export interface Me {
 export interface User {
   id:        number
   auth0Sub:  string
+  email:     string | null
   fullName:  string
   role:      Role
   active:    boolean

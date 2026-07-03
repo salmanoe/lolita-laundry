@@ -15,6 +15,10 @@ export function useMe() {
     queryKey: ['me'],
     enabled: isAuthenticated,
     staleTime: 5 * 60 * 1000,
+    // While unprovisioned (204 → null), poll so a SUPER_ADMIN approval lands automatically — the
+    // user drops off the "Menunggu Persetujuan" screen without having to hit "Periksa Lagi". Stops
+    // the moment a role resolves (data is non-null), so a provisioned user never polls.
+    refetchInterval: (query) => (query.state.data == null ? 15_000 : false),
     queryFn: async () => {
       const token = await getAccessTokenSilently()
       // 204 → apiFetch returns undefined; normalise to null so react-query treats it as resolved data.

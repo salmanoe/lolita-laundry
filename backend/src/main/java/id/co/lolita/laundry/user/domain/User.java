@@ -14,14 +14,16 @@ public class User {
 
     private final Long id;
     private final String auth0Sub;
+    private final String email;
     private String fullName;
     private Role role;
     private boolean active;
     private final Instant createdAt;
 
-    public User(Long id, String auth0Sub, String fullName, Role role, boolean active, Instant createdAt) {
+    public User(Long id, String auth0Sub, String email, String fullName, Role role, boolean active, Instant createdAt) {
         this.id = id;
         this.auth0Sub = auth0Sub;
+        this.email = email;
         this.fullName = fullName;
         this.role = role;
         this.active = active;
@@ -30,14 +32,16 @@ public class User {
 
     /**
      * Factory for a brand-new (unpersisted) user. Identity is the caller-supplied Auth0
-     * {@code sub} — the owner creates the Auth0 account first, then registers it here.
+     * {@code sub} — the owner creates the Auth0 account first, then registers it here. The
+     * {@code email} is the login email carried over from the approved pending request (null for the
+     * manual "paste sub" path); it lets the approval flow spot a duplicate identity for one person.
      */
-    public static User register(String auth0Sub, String fullName, Role role) {
+    public static User register(String auth0Sub, String email, String fullName, Role role) {
         var sub = auth0Sub == null ? "" : auth0Sub.trim();
         if (sub.isEmpty()) {
             throw new IllegalArgumentException("Auth0 sub wajib diisi");
         }
-        return new User(null, sub, requireName(fullName), role, true, Instant.now());
+        return new User(null, sub, trimToNull(email), requireName(fullName), role, true, Instant.now());
     }
 
     /**
@@ -74,6 +78,14 @@ public class User {
             throw new IllegalArgumentException("Nama wajib diisi");
         }
         return name;
+    }
+
+    private static String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        var trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
 }
