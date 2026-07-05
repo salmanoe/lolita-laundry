@@ -5,6 +5,7 @@ import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import EditOrderModal from '../components/EditOrderModal'
+import CorrectItemsModal from '../components/CorrectItemsModal'
 import { openDownloadUrl } from '../lib/download'
 import { nextAdvanceStatus, orderStatusBadge, orderStatusLabel } from '../lib/labels'
 import type {
@@ -28,9 +29,13 @@ export default function OrderDetailPage() {
   const token = async () => getAccessTokenSilently()
   // DAILY_STAFF manage orders but stay out of billing — the invoice PDF (and its prices) is
   // FINANCE_STAFF/SUPER_ADMIN only, so hide its button for them.
-  const isDailyStaff = useMe().data?.role === 'DAILY_STAFF'
+  const role = useMe().data?.role
+  const isDailyStaff = role === 'DAILY_STAFF'
+  // SUPER_ADMIN corrections: undo a cancellation, and correct items on a locked (DONE/DELIVERED) order.
+  const isSuperAdmin = role === 'SUPER_ADMIN'
 
   const [editOpen, setEditOpen] = useState(false)
+  const [correctOpen, setCorrectOpen] = useState(false)
 
   const orderQ = useQuery({
     queryKey: ['order', orderId],
@@ -80,6 +85,18 @@ export default function OrderDetailPage() {
     },
   })
 
+  // Undo a cancellation (SUPER_ADMIN) — restores the pre-cancel status and re-adds it to billing.
+  const reactivate = useMutation({
+    mutationFn: async () =>
+      apiFetch<Order>(`/api/orders/${orderId}/reactivate`, { method: 'POST', token: await token() }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['order', orderId] })
+      qc.invalidateQueries({ queryKey: ['order-history', orderId] })
+      qc.invalidateQueries({ queryKey: ['orders'] })
+      qc.invalidateQueries({ queryKey: ['billings'] })
+    },
+  })
+
   // Order invoice is available from RECEIVED onward: a live preview while the order is open,
   // frozen once delivered. Fetch a fresh pre-signed URL on click and open it.
   const openInvoice = useMutation({
@@ -104,6 +121,9 @@ export default function OrderDetailPage() {
   const showDept = order.lineItems.some((li) => li.departmentId != null)
   const next = nextAdvanceStatus[order.status]
   const editable = order.status === 'RECEIVED' || order.status === 'PROCESSING'
+  // SUPER_ADMIN item correction is for LOCKED orders (past the normal edit window) — open orders
+  // already use "Ubah Order"; cancelled orders can't be corrected.
+  const canCorrectItems = isSuperAdmin && (order.status === 'DONE' || order.status === 'DELIVERED')
 
   return (
     <div className="space-y-8">
@@ -127,6 +147,25 @@ export default function OrderDetailPage() {
                 className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 Ubah Order
+              </button>
+            )}
+            {canCorrectItems && (
+              <button
+                onClick={() => setCorrectOpen(true)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Koreksi Item
+              </button>
+            )}
+            {order.status === 'CANCELLED' && isSuperAdmin && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Aktifkan kembali order ini? Order akan dikembalikan ke tagihan.')) reactivate.mutate()
+                }}
+                disabled={reactivate.isPending}
+                className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              >
+                {reactivate.isPending ? 'Mengaktifkan…' : 'Aktifkan Kembali'}
               </button>
             )}
             {order.status !== 'CANCELLED' && !isDailyStaff && (
@@ -191,6 +230,11 @@ export default function OrderDetailPage() {
         {cancel.error && (
           <p className="mt-2 text-sm text-red-500">
             {cancel.error instanceof ApiError ? cancel.error.detail : 'Gagal membatalkan order.'}
+          </p>
+        )}
+        {reactivate.error && (
+          <p className="mt-2 text-sm text-red-500">
+            {reactivate.error instanceof ApiError ? reactivate.error.detail : 'Gagal mengaktifkan order.'}
           </p>
         )}
       </div>
@@ -275,6 +319,13 @@ export default function OrderDetailPage() {
         order={order}
         clientId={order.clientId}
         onClose={() => setEditOpen(false)}
+      />
+
+      <CorrectItemsModal
+        open={correctOpen}
+        order={order}
+        clientId={order.clientId}
+        onClose={() => setCorrectOpen(false)}
       />
     </div>
   )

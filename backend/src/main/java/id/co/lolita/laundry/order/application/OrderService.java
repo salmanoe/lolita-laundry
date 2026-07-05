@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
         GetOrdersUseCase, UpdateOrderUseCase, UpdateOrderStatusUseCase, CancelOrderUseCase,
+        ReactivateOrderUseCase, CorrectOrderItemsUseCase,
         DeliverOrderUseCase, GetDriverDeliveriesUseCase, DeliveredOrderQuery {
 
     private static final BigDecimal TREATMENT_MULTIPLIER = new BigDecimal("2.0");
@@ -211,6 +212,70 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
                 command.notes() == null || command.notes().isBlank() ? "Order dibatalkan" : command.notes(),
                 Instant.now()));
         eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // drop from the billing
+        return saved;
+    }
+
+    // ── ReactivateOrderUseCase ──
+
+    @Override
+    @Transactional
+    public Order reactivate(ReactivateOrderCommand command) {
+        var order = loadOrder(command.orderId());
+        // Restore the status the order held before it was cancelled — read from the last CANCELLED
+        // transition in the history (fallback RECEIVED). A cancel can only originate from
+        // RECEIVED/PROCESSING/DONE, so the restored status is always a live one.
+        var previous = historyRepository.findByOrderId(order.getId()).stream()
+                .filter(h -> h.toStatus() == OrderStatus.CANCELLED)
+                .reduce((first, second) -> second)   // last CANCELLED entry
+                .map(OrderStatusHistory::fromStatus)
+                .filter(s -> s != null && s != OrderStatus.CANCELLED && s != OrderStatus.DELIVERED)
+                .orElse(OrderStatus.RECEIVED);
+        order.reactivate(previous);
+        var saved = orderRepository.save(order);
+        historyRepository.save(OrderStatusHistory.record(
+                saved.getId(), OrderStatus.CANCELLED, previous, command.byUserId(),
+                "Pembatalan dibatalkan", Instant.now()));
+        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-add to the billing
+        return saved;
+    }
+
+    // ── CorrectOrderItemsUseCase ──
+
+    @Override
+    @Transactional
+    public Order correctItems(CorrectOrderItemsCommand command) {
+        var order = loadOrder(command.orderId());
+        var client = clientGateway.findById(order.getClientId());
+        boolean perDepartment = client.map(ClientSnapshot::perDepartment).orElse(false);
+
+        // Rejected once the order sits on an ISSUED/PAID billing — that invoice has been sent to the
+        // client and its totals must not change (same guard as the date/Treatment corrections).
+        if (billingStatus.isOrderOnIssuedBilling(order.getId())) {
+            throw new IllegalArgumentException(
+                    "Item tidak dapat dikoreksi karena order sudah masuk tagihan yang telah diterbitkan.");
+        }
+
+        // Re-price the corrected lines at the frozen order date (the historical effective date), so a
+        // swapped-in item gets the price it would have had at order time and its department is resolved.
+        var lines = priceLines(order.getClientId(), perDepartment, order.getOrderDate(), command.items());
+        order.correctItems(lines);
+        var saved = orderRepository.save(order);
+
+        // Leave a visible audit trail on /history (status is unchanged → from == to).
+        historyRepository.save(OrderStatusHistory.record(
+                saved.getId(), saved.getStatus(), saved.getStatus(), command.byUserId(),
+                "Item dikoreksi", Instant.now()));
+
+        eventPublisher.publishEvent(new OrderBillingSyncEvent(saved.getId()));   // re-total the monthly billing
+        // A DELIVERED order's per-order invoice is frozen (OrderInvoiceService refuses to re-render
+        // it). Re-publish OrderDeliveredEvent so its idempotent listener re-freezes the invoice with
+        // the corrected items. A DONE order's invoice is still a live preview — the next view refreshes it.
+        if (saved.getStatus() == OrderStatus.DELIVERED) {
+            var deliveredAt = deliveryRepository.findByOrderId(saved.getId())
+                    .map(DeliveryConfirmation::getDeliveredAt).orElse(Instant.now());
+            eventPublisher.publishEvent(new OrderDeliveredEvent(
+                    saved.getId(), saved.getOrderNumber(), saved.getClientId(), deliveredAt));
+        }
         return saved;
     }
 

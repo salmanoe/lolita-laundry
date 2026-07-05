@@ -6,8 +6,10 @@ import id.co.lolita.laundry.order.domain.OrderQuery;
 import id.co.lolita.laundry.order.domain.OrderStatus;
 import id.co.lolita.laundry.order.domain.port.in.*;
 import id.co.lolita.laundry.order.domain.port.in.CancelOrderUseCase.CancelOrderCommand;
+import id.co.lolita.laundry.order.domain.port.in.CorrectOrderItemsUseCase.CorrectOrderItemsCommand;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
+import id.co.lolita.laundry.order.domain.port.in.ReactivateOrderUseCase.ReactivateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.UpdateOrderStatusUseCase.AdvanceStatusCommand;
 import id.co.lolita.laundry.order.domain.port.in.UpdateOrderUseCase.UpdateOrderCommand;
 import id.co.lolita.laundry.shared.NotFoundException;
@@ -45,6 +47,8 @@ class OrderController {
     private final UpdateOrderUseCase updateOrder;
     private final UpdateOrderStatusUseCase updateStatus;
     private final CancelOrderUseCase cancelOrder;
+    private final ReactivateOrderUseCase reactivateOrder;
+    private final CorrectOrderItemsUseCase correctOrderItems;
     private final DeliverOrderUseCase deliverOrder;
     private final CurrentUserResolver currentUser;
 
@@ -130,6 +134,31 @@ class OrderController {
         var notes = request == null ? null : request.notes();
         return respond(cancelOrder.cancel(
                 new CancelOrderCommand(id, currentUser.currentUserId(authentication), notes)), authentication);
+    }
+
+    /**
+     * Reverses a cancellation (SUPER_ADMIN correction). Restores the status the order held before
+     * it was cancelled and re-adds it to the client's monthly billing.
+     */
+    @PostMapping("/{id}/reactivate")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    OrderResponse reactivate(@PathVariable Long id, Authentication authentication) {
+        return respond(reactivateOrder.reactivate(
+                new ReactivateOrderCommand(id, currentUser.currentUserId(authentication))), authentication);
+    }
+
+    /**
+     * SUPER_ADMIN correction of the line items on a locked (DONE/DELIVERED) order — fixes a wrong
+     * item picked by DAILY_STAFF after the normal RECEIVED/PROCESSING edit window closed. Rejected
+     * once the order is on an ISSUED/PAID billing. Prices are resolved server-side.
+     */
+    @PutMapping("/{id}/items")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    OrderResponse correctItems(@PathVariable Long id, @Valid @RequestBody List<OrderLineRequest> items,
+                               Authentication authentication) {
+        var inputs = items.stream().map(OrderLineRequest::toInput).toList();
+        return respond(correctOrderItems.correctItems(
+                new CorrectOrderItemsCommand(id, currentUser.currentUserId(authentication), inputs)), authentication);
     }
 
     // DAILY_STAFF are a price-free operator role: strip total/multiplier/line prices from the order
