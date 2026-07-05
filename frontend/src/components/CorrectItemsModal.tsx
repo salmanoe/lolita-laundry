@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -22,7 +22,7 @@ interface Props {
  * are separate RECEIVED/PROCESSING corrections); re-priced server-side at the frozen order date via
  * `PUT /api/orders/{id}/items`. Rejected by the backend if the order is on an issued billing.
  */
-export default function CorrectItemsModal({ open, onClose, order, clientId }: Props) {
+export default function CorrectItemsModal({ open, onClose, order, clientId }: Readonly<Props>) {
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
   const token = async () => getAccessTokenSilently()
@@ -81,6 +81,16 @@ export default function CorrectItemsModal({ open, onClose, order, clientId }: Pr
     return lines.reduce((s, l) => s + (priceById.get(l.itemId) ?? 0) * multiplier * l.quantity, 0)
   }, [lines, pickerItems, multiplier])
 
+  // Close on Escape (keyboard a11y) while the modal is open.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    globalThis.addEventListener('keydown', onKey)
+    return () => globalThis.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   const save = useMutation({
     mutationFn: async () =>
       apiFetch<Order>(`/api/orders/${order.id}/items`, {
@@ -102,8 +112,10 @@ export default function CorrectItemsModal({ open, onClose, order, clientId }: Pr
   const loading = itemsQ.isLoading || pricesQ.isLoading
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4" onClick={onClose}>
-      <div className="my-8 w-full max-w-2xl rounded-xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4">
+      {/* Backdrop as a native button → click / keyboard dismiss without a div click-handler. */}
+      <button type="button" aria-label="Tutup" onClick={onClose} className="fixed inset-0 cursor-default bg-black/40" />
+      <div className="relative z-10 my-8 w-full max-w-2xl rounded-xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-800">Koreksi Item {order.orderNumber}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Tutup">✕</button>
