@@ -3,9 +3,12 @@ package id.co.lolita.laundry.order.application;
 import id.co.lolita.laundry.order.domain.Order;
 import id.co.lolita.laundry.order.domain.OrderLineItem;
 import id.co.lolita.laundry.order.domain.OrderStatus;
+import id.co.lolita.laundry.order.domain.OrderStatusHistory;
 import id.co.lolita.laundry.order.domain.event.OrderBillingSyncEvent;
 import id.co.lolita.laundry.order.domain.event.OrderDeliveredEvent;
 import id.co.lolita.laundry.order.domain.port.in.CancelOrderUseCase;
+import id.co.lolita.laundry.order.domain.port.in.CorrectOrderItemsUseCase.CorrectOrderItemsCommand;
+import id.co.lolita.laundry.order.domain.port.in.ReactivateOrderUseCase.ReactivateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.CreateOrderUseCase.CreateOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.DeliverOrderUseCase.DeliverOrderCommand;
 import id.co.lolita.laundry.order.domain.port.in.OrderLineInput;
@@ -384,6 +387,86 @@ class OrderServiceTest {
         verify(historyRepository).save(any());
         // Billing reacts to drop the canceled order from the bill.
         verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+    }
+
+    @Test
+    void reactivate_restoresPreCancelStatus_recordsHistory_andFiresBillingSync() {
+        // The order was cancelled from PROCESSING — reactivation restores PROCESSING (read from history).
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.CANCELLED)));
+        when(historyRepository.findByOrderId(99L)).thenReturn(List.of(
+                OrderStatusHistory.record(99L, OrderStatus.PROCESSING, OrderStatus.CANCELLED, 5L, "batal", Instant.now())));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.reactivate(new ReactivateOrderCommand(99L, 5L));
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+        verify(historyRepository).save(any());
+        verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+    }
+
+    @Test
+    void reactivate_fallsBackToReceivedWhenNoHistory() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.CANCELLED)));
+        when(historyRepository.findByOrderId(99L)).thenReturn(List.of());
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.reactivate(new ReactivateOrderCommand(99L, 5L));
+
+        assertThat(result.getStatus()).isEqualTo(OrderStatus.RECEIVED);
+    }
+
+    @Test
+    void correctItems_replacesLines_onDoneOrder_firesBillingSync_notInvoiceRefresh() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(false);
+        when(catalogGateway.findActiveById(20L))
+                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(20L, "Bath Towel", 2L, "Lembar")));
+        when(pricingGateway.effectivePrice(eq(1L), eq(20L), any())).thenReturn(Optional.of(new BigDecimal("4000")));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.correctItems(new CorrectOrderItemsCommand(
+                99L, 5L, List.of(new OrderLineInput(20L, new BigDecimal("2")))));
+
+        assertThat(result.getLineItems()).singleElement()
+                .satisfies(li -> assertThat(li.itemId()).isEqualTo(20L));
+        assertThat(result.total()).isEqualByComparingTo("8000.00");   // 2 × 4000 × ×1
+        verify(historyRepository).save(any());   // audit trail (from == to)
+        verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+        // DONE order's invoice is a live preview — no re-freeze event.
+        verify(eventPublisher, never()).publishEvent(any(OrderDeliveredEvent.class));
+    }
+
+    @Test
+    void correctItems_onDeliveredOrder_alsoRefreshesFrozenInvoice() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DELIVERED)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(false);
+        when(deliveryRepository.findByOrderId(99L)).thenReturn(Optional.empty());   // deliveredAt falls back to now
+        when(catalogGateway.findActiveById(20L))
+                .thenReturn(Optional.of(new CatalogGateway.CatalogItem(20L, "Bath Towel", 2L, "Lembar")));
+        when(pricingGateway.effectivePrice(eq(1L), eq(20L), any())).thenReturn(Optional.of(new BigDecimal("4000")));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.correctItems(new CorrectOrderItemsCommand(
+                99L, 5L, List.of(new OrderLineInput(20L, new BigDecimal("1")))));
+
+        verify(eventPublisher).publishEvent(any(OrderBillingSyncEvent.class));
+        // DELIVERED order's invoice is frozen — re-publish OrderDeliveredEvent to re-freeze it.
+        verify(eventPublisher).publishEvent(any(OrderDeliveredEvent.class));
+    }
+
+    @Test
+    void correctItems_rejectedWhenOnIssuedBilling() {
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DELIVERED)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.correctItems(new CorrectOrderItemsCommand(
+                99L, 5L, List.of(new OrderLineInput(20L, new BigDecimal("1"))))))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("diterbitkan");
+        verify(orderRepository, never()).save(any());
     }
 
     @Test

@@ -161,6 +161,44 @@ public class Order {
     }
 
     /**
+     * Reverses a cancellation (SUPER_ADMIN correction), restoring the order to the status it held
+     * before it was cancelled. Only a {@code CANCELLED} order can be reactivated; the target must be
+     * one of the live statuses ({@code RECEIVED}/{@code PROCESSING}/{@code DONE}) — a cancel can
+     * never originate from {@code DELIVERED}, so that is rejected as a target too. The caller
+     * re-syncs the monthly billing (mirror of {@link #cancel()} dropping it).
+     */
+    public void reactivate(OrderStatus previous) {
+        if (status != OrderStatus.CANCELLED) {
+            throw new IllegalArgumentException("Only a cancelled order can be reactivated");
+        }
+        if (previous == null || previous == OrderStatus.CANCELLED || previous == OrderStatus.DELIVERED) {
+            throw new IllegalArgumentException("Invalid reactivation target: " + previous);
+        }
+        this.status = previous;
+    }
+
+    /**
+     * SUPER_ADMIN correction of the line items on a <em>locked</em> order — the affordance for
+     * fixing a wrong item picked by DAILY_STAFF after the order has advanced past the normal edit
+     * window. Unlike {@link #edit}, there is no status-window check (DONE/DELIVERED are allowed);
+     * only a {@code CANCELLED} order is rejected. The lines are fully replaced and re-priced with
+     * the order's existing multiplier (Treatment stays as-is — that is a separate correction). The
+     * caller supplies price snapshots resolved at the frozen order date, re-syncs the monthly
+     * billing, and (for a DELIVERED order) re-renders the frozen invoice.
+     */
+    public void correctItems(List<NewLine> lines) {
+        if (status == OrderStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cannot edit a cancelled order");
+        }
+        if (lines == null || lines.isEmpty()) {
+            throw new IllegalArgumentException("At least one line item is required");
+        }
+        this.lineItems.clear();
+        lines.forEach(l -> this.lineItems.add(
+                OrderLineItem.create(l.itemId(), l.quantity(), l.priceAtOrder(), l.departmentId(), this.pricingMultiplier)));
+    }
+
+    /**
      * Read-only view of the order's line items.
      */
     public List<OrderLineItem> getLineItems() {

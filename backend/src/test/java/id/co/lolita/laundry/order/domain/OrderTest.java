@@ -132,4 +132,64 @@ class OrderTest {
         assertThatThrownBy(() -> order.edit(null, null, null, "x", null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void reactivate_restoresGivenStatus() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        order.advanceStatus(OrderStatus.PROCESSING);
+        order.cancel();
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.CANCELLED);
+
+        order.reactivate(OrderStatus.PROCESSING);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PROCESSING);
+    }
+
+    @Test
+    void reactivate_rejectedWhenNotCancelled() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        assertThatThrownBy(() -> order.reactivate(OrderStatus.RECEIVED))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void reactivate_rejectsDeliveredOrCancelledTarget() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        order.cancel();
+        assertThatThrownBy(() -> order.reactivate(OrderStatus.DELIVERED))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> order.reactivate(OrderStatus.CANCELLED))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> order.reactivate(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void correctItems_replacesAndRepricesOnLockedOrder() {
+        var order = newOrder(new BigDecimal("2.0"), line(10L, "3", "5000"));
+        order.advanceStatus(OrderStatus.PROCESSING);
+        order.advanceStatus(OrderStatus.DONE);
+        // DONE is past the normal edit window, but a correction is allowed.
+        order.correctItems(List.of(new Order.NewLine(20L, new BigDecimal("2"), new BigDecimal("4000"), null)));
+
+        assertThat(order.getLineItems()).hasSize(1);
+        assertThat(order.getLineItems().getFirst().itemId()).isEqualTo(20L);
+        // Multiplier (×2) is preserved: 2 × 4000 × 2.
+        assertThat(order.total()).isEqualByComparingTo("16000.00");
+    }
+
+    @Test
+    void correctItems_rejectedOnCancelledOrder() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        order.cancel();
+        assertThatThrownBy(() -> order.correctItems(
+                List.of(new Order.NewLine(20L, new BigDecimal("1"), new BigDecimal("10"), null))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void correctItems_rejectsEmptyLines() {
+        var order = newOrder(BigDecimal.ONE, line(10L, "1", "10"));
+        assertThatThrownBy(() -> order.correctItems(List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }
