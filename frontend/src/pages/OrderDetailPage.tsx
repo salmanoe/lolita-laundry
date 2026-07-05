@@ -160,7 +160,7 @@ export default function OrderDetailPage() {
             {order.status === 'CANCELLED' && isSuperAdmin && (
               <button
                 onClick={() => {
-                  if (window.confirm('Aktifkan kembali order ini? Order akan dikembalikan ke tagihan.')) reactivate.mutate()
+                  if (globalThis.confirm('Aktifkan kembali order ini? Order akan dikembalikan ke tagihan.')) reactivate.mutate()
                 }}
                 disabled={reactivate.isPending}
                 className="rounded-lg border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
