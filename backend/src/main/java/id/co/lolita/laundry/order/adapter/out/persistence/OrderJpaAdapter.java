@@ -59,8 +59,8 @@ class OrderJpaAdapter implements OrderRepository {
     }
 
     @Override
-    public long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate) {
-        return jpaRepository.countByClientIdAndOrderDate(clientId, orderDate);
+    public Optional<String> findMaxOrderNumberByPrefix(String prefix) {
+        return Optional.ofNullable(jpaRepository.findMaxOrderNumberByPrefix(prefix + "%"));
     }
 
     @Override
