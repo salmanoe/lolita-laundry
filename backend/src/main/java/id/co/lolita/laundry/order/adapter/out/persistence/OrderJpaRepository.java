@@ -12,7 +12,13 @@ import java.util.List;
 
 interface OrderJpaRepository extends JpaRepository<OrderJpaEntity, Long> {
 
-    long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate);
+    /**
+     * The highest order number matching {@code prefix} ({@code CODE-yyyymmdd-%}) — drives the
+     * per-client-per-day sequence. Lexical MAX equals numeric max because everything before the
+     * fixed-width {@code seq} is identical for a given prefix. Null when none match.
+     */
+    @Query("SELECT MAX(o.orderNumber) FROM OrderJpaEntity o WHERE o.orderNumber LIKE :prefix")
+    String findMaxOrderNumberByPrefix(@Param("prefix") String prefix);
 
     /**
      * DELIVERED orders for a client whose order date falls in {@code [from, to]} — the

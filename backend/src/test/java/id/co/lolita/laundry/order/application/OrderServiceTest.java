@@ -112,7 +112,7 @@ class OrderServiceTest {
     void createOrder_generatesSequentialOrderNumber_andSnapshotsPrice() {
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
-        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
+        when(orderRepository.findMaxOrderNumberByPrefix(any())).thenReturn(Optional.empty());
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.createOrder(new CreateOrderCommand(
@@ -171,7 +171,7 @@ class OrderServiceTest {
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(true)));
         stubPricingForItem10();
         when(pricingGateway.departmentForItem(1L, 10L)).thenReturn(Optional.of(7L));
-        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
+        when(orderRepository.findMaxOrderNumberByPrefix(any())).thenReturn(Optional.empty());
         when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.createOrder(new CreateOrderCommand(
@@ -246,11 +246,12 @@ class OrderServiceTest {
     void createOrder_retriesOnceWhenOrderNumberCollides() {
         // A concurrent submit grabbed the same computed order_number: the first save fails on
         // UNIQUE(order_number); the retry recomputes the sequence and succeeds.
+        var prefix = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
-        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
-                .thenReturn(0L)   // first attempt → -001
-                .thenReturn(1L);  // retry sees the winner committed → -002
+        when(orderRepository.findMaxOrderNumberByPrefix(any()))
+                .thenReturn(Optional.empty())               // first attempt → -001
+                .thenReturn(Optional.of(prefix + "001"));   // retry sees the winner committed → -002
         when(orderRepository.save(any()))
                 .thenThrow(new DataIntegrityViolationException("duplicate order_number"))
                 .thenAnswer(inv -> inv.getArgument(0));
@@ -258,29 +259,31 @@ class OrderServiceTest {
         var result = service.createOrder(new CreateOrderCommand(
                 1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
 
-        var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-002";
-        assertThat(result.getOrderNumber()).isEqualTo(expected);
+        assertThat(result.getOrderNumber()).isEqualTo(prefix + "002");
         verify(orderRepository, times(2)).save(any());
     }
 
     @Test
     void createOrder_retriesAcrossSeveralCollisions_thenSucceeds() {
         // A runtime burst showed a single retry is too thin; the loop tolerates several rounds.
+        var prefix = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
-        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any()))
-                .thenReturn(0L, 1L, 2L, 3L);
+        when(orderRepository.findMaxOrderNumberByPrefix(any()))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(prefix + "001"))
+                .thenReturn(Optional.of(prefix + "002"))
+                .thenReturn(Optional.of(prefix + "003"));
         when(orderRepository.save(any()))
-                .thenThrow(new DataIntegrityViolationException("dup"))
-                .thenThrow(new DataIntegrityViolationException("dup"))
-                .thenThrow(new DataIntegrityViolationException("dup"))
+                .thenThrow(new DataIntegrityViolationException("duplicate order_number"))
+                .thenThrow(new DataIntegrityViolationException("duplicate order_number"))
+                .thenThrow(new DataIntegrityViolationException("duplicate order_number"))
                 .thenAnswer(inv -> inv.getArgument(0));
 
         var result = service.createOrder(new CreateOrderCommand(
                 1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, new BigDecimal("1")))));
 
-        var expected = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-004";
-        assertThat(result.getOrderNumber()).isEqualTo(expected);
+        assertThat(result.getOrderNumber()).isEqualTo(prefix + "004");
         verify(orderRepository, times(4)).save(any());
     }
 
@@ -289,14 +292,49 @@ class OrderServiceTest {
         // Every attempt collides → a friendly 409, never the raw DB error or a 500.
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
         stubPricingForItem10();
-        when(orderRepository.countByClientIdAndOrderDate(eq(1L), any())).thenReturn(0L);
-        when(orderRepository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
+        when(orderRepository.findMaxOrderNumberByPrefix(any())).thenReturn(Optional.empty());
+        when(orderRepository.save(any())).thenThrow(new DataIntegrityViolationException("duplicate order_number"));
 
         assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
                 1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
                 .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("coba lagi");
         verify(orderRepository, times(8)).save(any());   // MAX_ORDER_NUMBER_ATTEMPTS
+
+    }
+
+    @Test
+    void createOrder_backDatedSiblingDoesNotCollide() {
+        // Regression: an earlier order for this client+day was back-dated by a SUPER_ADMIN. Its
+        // frozen number (...-002) still carries today's prefix, so the sequence must continue from
+        // it (→ -003) rather than reusing a taken number (the old order_date count would have said 1).
+        var prefix = "AYI-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + "-";
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.findMaxOrderNumberByPrefix(any())).thenReturn(Optional.of(prefix + "002"));
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE))));
+
+        assertThat(result.getOrderNumber()).isEqualTo(prefix + "003");
+        verify(orderRepository, times(1)).save(any());
+    }
+
+    @Test
+    void createOrder_nonOrderNumberViolationPropagates_notMaskedAsCollision() {
+        // A DataIntegrityViolationException from a DIFFERENT constraint must surface its real cause,
+        // not be retried or mislabeled as the "bentrok" order-number collision.
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+        stubPricingForItem10();
+        when(orderRepository.findMaxOrderNumberByPrefix(any())).thenReturn(Optional.empty());
+        when(orderRepository.save(any()))
+                .thenThrow(new DataIntegrityViolationException("violates not-null constraint on column notes"));
+
+        assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
+                1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        verify(orderRepository, times(1)).save(any());   // no retry on a non-collision error
     }
 
     @Test

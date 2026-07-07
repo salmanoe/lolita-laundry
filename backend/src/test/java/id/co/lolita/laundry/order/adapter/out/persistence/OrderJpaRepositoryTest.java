@@ -37,15 +37,18 @@ class OrderJpaRepositoryTest {
     }
 
     @Test
-    void countByClientIdAndOrderDate_countsOnlyThatClientAndDate() {
-        var today = LocalDate.now();
-        repository.save(order("AYI-1", 1L, today, OrderStatus.RECEIVED));
-        repository.save(order("AYI-2", 1L, today, OrderStatus.RECEIVED));
-        repository.save(order("AYI-3", 1L, today.minusDays(1), OrderStatus.RECEIVED));
-        repository.save(order("PBS-1", 2L, today, OrderStatus.RECEIVED));
+    void findMaxOrderNumberByPrefix_returnsHighestForPrefix_keyedOnNumberNotOrderDate() {
+        // The sequence is derived from the frozen order NUMBER, not the mutable order_date. AYI-3
+        // was back-dated (order_date = yesterday) but its number keeps today's prefix, so it must
+        // still count toward the max — otherwise a new order would reuse -003.
+        var prefix = "AYI-20260101-";
+        repository.save(order(prefix + "001", 1L, LocalDate.of(2026, 1, 1), OrderStatus.RECEIVED));
+        repository.save(order(prefix + "002", 1L, LocalDate.of(2026, 1, 1), OrderStatus.RECEIVED));
+        repository.save(order(prefix + "003", 1L, LocalDate.of(2025, 12, 30), OrderStatus.RECEIVED)); // back-dated
+        repository.save(order("PBS-20260101-001", 2L, LocalDate.of(2026, 1, 1), OrderStatus.RECEIVED)); // other client
 
-        assertThat(repository.countByClientIdAndOrderDate(1L, today)).isEqualTo(2);
-        assertThat(repository.countByClientIdAndOrderDate(2L, today)).isEqualTo(1);
+        assertThat(repository.findMaxOrderNumberByPrefix(prefix + "%")).isEqualTo(prefix + "003");
+        assertThat(repository.findMaxOrderNumberByPrefix("GBR-20260101-%")).isNull();   // none yet
     }
 
     @Test

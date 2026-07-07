@@ -28,9 +28,13 @@ public interface OrderRepository {
     List<Order> findOpenDeliveries();
 
     /**
-     * Count of orders for a client on a date — drives the per-client-per-day sequence number.
+     * The highest existing order number whose number begins with {@code prefix}
+     * ({@code CODE-yyyymmdd-}) — drives the per-client-per-day sequence number. Keyed on the
+     * (frozen) order NUMBER, not the mutable {@code order_date}, so a SUPER_ADMIN date correction
+     * never makes a later order reuse an already-taken number. Empty when no order carries the
+     * prefix yet. Because {@code seq} is fixed-width, lexical max equals numeric max.
      */
-    long countByClientIdAndOrderDate(Long clientId, LocalDate orderDate);
+    Optional<String> findMaxOrderNumberByPrefix(String prefix);
 
     /**
      * Every DELIVERED order for a client with an order date in {@code [from, to]} (a calendar

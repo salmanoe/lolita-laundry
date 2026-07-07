@@ -11,6 +11,7 @@ import id.co.lolita.laundry.shared.ConflictException;
 import id.co.lolita.laundry.shared.NotFoundException;
 import id.co.lolita.laundry.shared.Page;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -24,6 +25,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -33,6 +35,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
@@ -477,15 +480,35 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
         for (int remaining = MAX_ORDER_NUMBER_ATTEMPTS; remaining > 1; remaining--) {
             try {
                 return attempt.get();
-            } catch (DataIntegrityViolationException collision) {
-                // a concurrent submit took our number — recompute the sequence and retry
+            } catch (DataIntegrityViolationException ex) {
+                if (!isOrderNumberCollision(ex)) {
+                    throw ex;   // a different constraint — surface the real cause, don't mask/retry
+                }
+                log.warn("order_number collision, recomputing sequence and retrying (attempt {}/{})",
+                        MAX_ORDER_NUMBER_ATTEMPTS - remaining + 1, MAX_ORDER_NUMBER_ATTEMPTS);
             }
         }
         try {
-            return attempt.get();   // last attempt — let a non-collision error propagate as-is
-        } catch (DataIntegrityViolationException exhausted) {
+            return attempt.get();   // last attempt
+        } catch (DataIntegrityViolationException ex) {
+            if (!isOrderNumberCollision(ex)) {
+                throw ex;
+            }
+            log.warn("order_number collision persisted after {} attempts — surfacing 409 to caller",
+                    MAX_ORDER_NUMBER_ATTEMPTS);
             throw new ConflictException("Order bersamaan sedang ramai, nomor order bentrok. Silakan coba lagi.");
         }
+    }
+
+    /**
+     * True only when the integrity violation is the {@code order_number} unique constraint — the
+     * one case a retry can resolve. Any other constraint (FK, NOT NULL, a different unique) is a
+     * genuine error that must surface, not be masked as a "bentrok" collision.
+     */
+    private static boolean isOrderNumberCollision(DataIntegrityViolationException ex) {
+        var cause = ex.getMostSpecificCause();
+        String message = cause.getMessage();
+        return message != null && message.toLowerCase(Locale.ROOT).contains("order_number");
     }
 
     private Order assemble(ClientSnapshot client, boolean treatment, LocalDate dueDate,
@@ -543,8 +566,16 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     }
 
     private String generateOrderNumber(ClientSnapshot client, LocalDate date) {
-        long seq = orderRepository.countByClientIdAndOrderDate(client.id(), date) + 1;
-        return "%s-%s-%03d".formatted(client.clientCode(), date.format(ORDER_DATE_FORMAT), seq);
+        // Sequence is derived from the (frozen) order NUMBER space, not the mutable order_date:
+        // a SUPER_ADMIN date correction keeps the number, so counting by order_date would let a
+        // later same-day order reuse an already-taken number (deterministic collision → the
+        // misleading "bentrok" 409). The prefix's trailing seq is fixed-width %03d, so lexical
+        // MAX == numeric max.
+        String prefix = "%s-%s-".formatted(client.clientCode(), date.format(ORDER_DATE_FORMAT));
+        long seq = orderRepository.findMaxOrderNumberByPrefix(prefix)
+                .map(max -> Long.parseLong(max.substring(prefix.length())))
+                .orElse(0L) + 1;
+        return "%s%03d".formatted(prefix, seq);
     }
 
     private Order loadOrder(Long id) {
