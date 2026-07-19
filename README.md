@@ -14,7 +14,7 @@ businesses.
 | JDK          | Eclipse Temurin 25                                           |
 | Build        | Gradle Kotlin DSL                                            |
 | Auth         | Auth0                                                        |
-| Database     | PostgreSQL (Neon.tech)                                       |
+| Database     | PostgreSQL 17 (self-hosted on the VPS; was Neon.tech)        |
 | File storage | Cloudflare R2                                                |
 | Frontend     | React 19 + Vite → Vercel                                     |
 | Hosting      | Sumopod VPS (Ubuntu 24.04, x86_64)                           |
