@@ -3,7 +3,6 @@ import AuthGuard from './auth/AuthGuard'
 import RequireSuperAdmin from './auth/RequireSuperAdmin'
 import RoleLayout from './components/RoleLayout'
 import DeliveriesPage from './pages/DeliveriesPage'
-import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ClientsPage from './pages/ClientsPage'
 
@@ -20,10 +19,6 @@ import UsersPage from './pages/UsersPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 const router = createBrowserRouter([
-  {
-    path: '/login',
-    element: <LoginPage />,
-  },
   {
     // All routes require a valid Auth0 session. RoleLayout picks the chrome by role:
     // DAILY_STAFF get the minimal operator shell (Buat Order / Order / Pengantaran); everyone
