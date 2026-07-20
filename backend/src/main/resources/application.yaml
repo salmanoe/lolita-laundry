@@ -1,5 +1,14 @@
 spring:
   application:
     name: lolita-laundry
-  profiles:
-    active: dev   # override to 'prod' on the Sumopod VPS
+  # NO default active profile — this is a deliberate fail-closed security decision.
+  # The security mode is chosen entirely by profile:
+  #   dev  → DevSecurityConfig  (permit-all, no JWT — local development only)
+  #   prod → SecurityConfig     (Auth0 JWT enforced; issuer-uri in application-prod.yaml)
+  # With NO profile set, SecurityConfig (@Profile("!dev")) is active but no JwtDecoder can be
+  # built (issuer-uri lives only in the prod profile), so a plain `java -jar` refuses to boot
+  # rather than silently serving the entire API unauthenticated. This means:
+  #   • Local dev is activated by Gradle (`bootRun` sets -Dspring.profiles.active=dev; override
+  #     with `./gradlew bootRun -Pprofile=authdev`).
+  #   • Production MUST set SPRING_PROFILES_ACTIVE=prod (already in the systemd unit).
+  #   • The test classpath's own application.yaml pins `test`, so tests are unaffected.
