@@ -561,6 +561,20 @@ class OrderServiceTest {
     }
 
     @Test
+    void cancel_rejectedWhenOnIssuedBilling() {
+        // The order sits on an ISSUED/PAID invoice already sent to the client — cancelling would
+        // leave it CANCELLED while the frozen invoice line still lists it. Rejected, same as the
+        // date/treatment/item corrections.
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.DONE)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.cancel(new CancelOrderUseCase.CancelOrderCommand(99L, 5L, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("diterbitkan");
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
     void deliver_rejectedWhenCancelled() {
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.CANCELLED)));
 

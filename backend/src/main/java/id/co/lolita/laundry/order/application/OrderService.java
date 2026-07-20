@@ -207,6 +207,14 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     @Transactional
     public Order cancel(CancelOrderCommand command) {
         var order = loadOrder(command.orderId());
+        // Rejected once the order sits on an ISSUED/PAID billing (same guard as the date/Treatment/
+        // item corrections): that invoice has already been sent to the client, so cancelling would
+        // leave the order CANCELLED while its frozen invoice line still lists it — a silent
+        // status/billing inconsistency. A still-DRAFT bill has no such issue (sync drops the order).
+        if (billingStatus.isOrderOnIssuedBilling(order.getId())) {
+            throw new IllegalArgumentException(
+                    "Order tidak dapat dibatalkan karena sudah masuk tagihan yang telah diterbitkan.");
+        }
         var from = order.getStatus();
         order.cancel();
         var saved = orderRepository.save(order);
