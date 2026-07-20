@@ -9,7 +9,7 @@ export interface AuthState {
   user: User | undefined
   getAccessTokenSilently: () => Promise<string>
   loginWithRedirect: () => void
-  logout: (opts?: { logoutParams?: { returnTo?: string } }) => void
+  logout: (opts?: { logoutParams?: { returnTo?: string; federated?: boolean } }) => void
 }
 
 const AuthContext = createContext<AuthState>(null!)
