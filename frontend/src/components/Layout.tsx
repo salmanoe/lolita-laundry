@@ -85,7 +85,8 @@ export default function Layout() {
               <button
                 onClick={() => {
                   setMenuOpen(false)
-                  logout({ logoutParams: { returnTo: window.location.origin } })
+                  // federated: also end the Auth0-brokered IdP (Google) session, not just the local one.
+                  logout({ logoutParams: { returnTo: window.location.origin, federated: true } })
                 }}
                 className="block w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 hover:text-red-600"
               >

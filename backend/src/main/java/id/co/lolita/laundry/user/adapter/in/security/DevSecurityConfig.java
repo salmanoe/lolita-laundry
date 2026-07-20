@@ -1,5 +1,7 @@
 package id.co.lolita.laundry.user.adapter.in.security;
 
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -24,7 +26,21 @@ import static org.springframework.security.config.Customizer.withDefaults;
 @Configuration
 @EnableWebSecurity
 @Profile("dev")
+@Slf4j
 class DevSecurityConfig {
+
+    // Loud, unmissable log line whenever the permit-all chain is wired. The packaged JAR has no
+    // default profile, so this can only appear when someone explicitly ran with the dev profile —
+    // if it ever shows up in a production log, the app is serving unauthenticated and must be
+    // restarted with SPRING_PROFILES_ACTIVE=prod.
+    @PostConstruct
+    void warnPermitAll() {
+        log.warn("╔══════════════════════════════════════════════════════════════════════╗");
+        log.warn("║  DEV SECURITY ACTIVE — ALL REQUESTS ARE PERMITTED WITHOUT A JWT.      ║");
+        log.warn("║  This is local-development mode only. If you see this in production,  ║");
+        log.warn("║  stop the app and restart with SPRING_PROFILES_ACTIVE=prod.           ║");
+        log.warn("╚══════════════════════════════════════════════════════════════════════╝");
+    }
 
     @Bean
     SecurityFilterChain devSecurityFilterChain(HttpSecurity http) {

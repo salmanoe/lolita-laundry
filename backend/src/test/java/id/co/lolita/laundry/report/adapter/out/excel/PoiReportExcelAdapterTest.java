@@ -76,6 +76,27 @@ class PoiReportExcelAdapterTest {
         }
     }
 
+    @Test
+    void neutralizesFormulaInjectionInTextCells() throws Exception {
+        // A client renamed to a formula-prefixed string must be stored as literal text, not become
+        // a live formula when the export is opened in Excel. The leading '=' is prefixed with a
+        // quote so the value is inert.
+        var report = new DailyReport(LocalDate.of(2026, 6, 8),
+                List.of(new ClientLine(1L, "=cmd|'/c calc'!A1", "-2+3", 1, new BigDecimal("1000"))),
+                new BigDecimal("1000"));
+
+        byte[] bytes = adapter.dailyWorkbook(report);
+
+        try (var wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            Sheet sheet = wb.getSheetAt(0);
+            // Stored with the neutralizing leading quote so Excel treats it as inert text.
+            assertThat(cellTextSomewhere(sheet, "'=cmd|'/c calc'!A1")).isTrue();
+            assertThat(cellTextSomewhere(sheet, "'-2+3")).isTrue();
+            // ...and the raw dangerous value is NOT present.
+            assertThat(cellTextSomewhere(sheet, "=cmd|'/c calc'!A1")).isFalse();
+        }
+    }
+
     private static boolean cellTextSomewhere(Sheet sheet, String text) {
         for (var row : sheet) {
             for (var cell : row) {

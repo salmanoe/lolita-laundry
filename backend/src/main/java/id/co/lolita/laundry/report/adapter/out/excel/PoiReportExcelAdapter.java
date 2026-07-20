@@ -160,8 +160,27 @@ class PoiReportExcelAdapter implements ReportExcelPort {
 
     private static void cell(Row row, int col, String value, CellStyle style) {
         Cell c = row.createCell(col);
-        c.setCellValue(value == null ? "" : value);
+        c.setCellValue(sanitize(value));
         c.setCellStyle(style);
+    }
+
+    /**
+     * Neutralizes CSV/Excel formula (and DDE) injection: client names, item names, and order
+     * numbers are staff-editable free text that flows unescaped into text cells. A value renamed to
+     * e.g. {@code =cmd|'/c calc'!A1} becomes a live formula the moment a user opens the export in
+     * Excel. Prefixing any leading {@code = + - @}, tab, or CR with a single quote forces Excel to
+     * treat the cell as literal text — the standard mitigation, applied once here so every current
+     * and future call site is covered. Numeric cells ({@code numCell}/{@code moneyCell}) are unaffected.
+     */
+    private static String sanitize(String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
+        }
+        char first = value.charAt(0);
+        if (first == '=' || first == '+' || first == '-' || first == '@' || first == '\t' || first == '\r') {
+            return "'" + value;
+        }
+        return value;
     }
 
     private static void numCell(Row row, int col, BigDecimal value, CellStyle style) {

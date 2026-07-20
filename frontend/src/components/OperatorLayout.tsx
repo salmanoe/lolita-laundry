@@ -29,7 +29,7 @@ export default function OperatorLayout() {
           <div className="flex items-center gap-3">
             <span className="hidden text-xs text-blue-100/80 sm:inline">{meQ.data?.fullName ?? user?.name}</span>
             <button
-              onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+              onClick={() => logout({ logoutParams: { returnTo: window.location.origin, federated: true } })}
               className="rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/25"
             >
               Keluar

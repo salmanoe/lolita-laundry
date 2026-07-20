@@ -106,3 +106,12 @@ dependencies {
 tasks.withType<Test> {
     useJUnitPlatform()
 }
+
+// The packaged JAR carries NO default Spring profile (fail-closed): without an explicit profile
+// the JWT-enforcing SecurityConfig is active but has no issuer-uri to build a JwtDecoder, so the
+// app refuses to boot rather than serve the API unauthenticated. Local `bootRun` therefore opts
+// into the permit-all dev profile here; override with `./gradlew bootRun -Pprofile=authdev` (real
+// Auth0 JWT locally) or `-Pprofile=prod`. Production sets SPRING_PROFILES_ACTIVE=prod in systemd.
+tasks.named<org.springframework.boot.gradle.tasks.run.BootRun>("bootRun") {
+    systemProperty("spring.profiles.active", (project.findProperty("profile") ?: "dev").toString())
+}
