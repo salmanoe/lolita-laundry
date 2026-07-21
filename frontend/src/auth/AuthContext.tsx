@@ -1,14 +1,22 @@
 import { createContext, ReactNode, useContext, useMemo } from 'react'
 import { Auth0Provider, useAuth0, User } from '@auth0/auth0-react'
+import { purgeAuthCache } from './recovery'
 
 // ── Auth state contract ───────────────────────────────────────────────────────
 
 export interface AuthState {
   isAuthenticated: boolean
   isLoading: boolean
+  /**
+   * Set when the SDK failed to establish a session (e.g. `checkSession()` rejected because the
+   * stored refresh token was revoked by Refresh Token Rotation reuse detection, or iOS/Safari ITP
+   * evicted part of the localStorage cache). Callers MUST render an escape hatch when this is set —
+   * without one the app sits on a spinner forever and only a manual "clear site data" recovers it.
+   */
+  error: Error | undefined
   user: User | undefined
   getAccessTokenSilently: () => Promise<string>
-  loginWithRedirect: () => void
+  loginWithRedirect: () => Promise<void>
   logout: (opts?: { logoutParams?: { returnTo?: string; federated?: boolean } }) => void
 }
 
@@ -22,9 +30,10 @@ export const useAuth = (): AuthState => useContext(AuthContext)
 const MOCK_STATE: AuthState = {
   isAuthenticated: true,
   isLoading: false,
+  error: undefined,
   user: { name: 'Dev User (Mock)', email: 'dev@lolita.co.id', sub: 'mock|dev' },
   getAccessTokenSilently: async () => 'dev-mock-token',
-  loginWithRedirect: () => {},
+  loginWithRedirect: async () => {},
   logout: () => {},
 }
 
@@ -35,6 +44,17 @@ function MockAuthProvider({ children }: { children: ReactNode }) {
 // ── Real Auth0 bridge ─────────────────────────────────────────────────────────
 // Sits inside Auth0Provider, reads from useAuth0(), and feeds our AuthContext.
 
+/**
+ * Auth0 error codes that mean "this session is gone, only a fresh login fixes it" — as opposed to a
+ * transient network blip, which must NOT bounce the user out of the app.
+ */
+const UNRECOVERABLE = new Set([
+  'login_required',
+  'consent_required',
+  'invalid_grant',
+  'missing_refresh_token',
+])
+
 function Auth0Bridge({ children }: { children: ReactNode }) {
   const auth0 = useAuth0()
 
@@ -42,13 +62,30 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
     () => ({
       isAuthenticated: auth0.isAuthenticated,
       isLoading: auth0.isLoading,
+      error: auth0.error,
       user: auth0.user,
-      getAccessTokenSilently: () => auth0.getAccessTokenSilently(),
+      // Mid-session recovery. Every queryFn in the app calls this; if the refresh token was revoked
+      // while the user was working (Refresh Token Rotation reuse detection kills the whole family),
+      // each call throws and the user is left staring at broken screens with a valid-looking UI and
+      // no prompt to log in again. Catch that one class of failure, purge the dead cache and send
+      // them through login — instead of surfacing "invalid_grant" as a data-loading error.
+      getAccessTokenSilently: async () => {
+        try {
+          return await auth0.getAccessTokenSilently()
+        } catch (e) {
+          const code = (e as { error?: string })?.error
+          if (code && UNRECOVERABLE.has(code)) {
+            purgeAuthCache()
+            void auth0.loginWithRedirect()
+          }
+          throw e
+        }
+      },
       loginWithRedirect: () => auth0.loginWithRedirect(),
       logout: (opts) => auth0.logout(opts),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [auth0.isAuthenticated, auth0.isLoading, auth0.user],
+    [auth0.isAuthenticated, auth0.isLoading, auth0.error, auth0.user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
