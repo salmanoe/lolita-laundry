@@ -81,7 +81,12 @@ function Auth0Bridge({ children }: { children: ReactNode }) {
           throw e
         }
       },
-      loginWithRedirect: () => auth0.loginWithRedirect(),
+      // Logout is deliberately NOT federated (that would end the user's entire Google browser
+      // session, not just Lolita). Ending the Auth0 tenant session alone means Google would
+      // silently re-select the still-signed-in account on the next login, so force the account
+      // chooser here — that is how a shared device switches users.
+      loginWithRedirect: () =>
+        auth0.loginWithRedirect({ authorizationParams: { prompt: 'select_account' } }),
       logout: (opts) => auth0.logout(opts),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

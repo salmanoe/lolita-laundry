@@ -85,8 +85,10 @@ export default function Layout() {
               <button
                 onClick={() => {
                   setMenuOpen(false)
-                  // federated: also end the Auth0-brokered IdP (Google) session, not just the local one.
-                  logout({ logoutParams: { returnTo: window.location.origin, federated: true } })
+                  // Deliberately NOT federated — that would end the user's whole Google browser
+                  // session (Gmail, Drive, …), not just Lolita. Account switching is handled by
+                  // prompt=select_account on login instead (see AuthContext).
+                  logout({ logoutParams: { returnTo: window.location.origin } })
                 }}
                 className="block w-full px-3 py-2 text-left text-sm text-gray-600 hover:bg-gray-50 hover:text-red-600"
               >
