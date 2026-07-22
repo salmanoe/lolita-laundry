@@ -34,7 +34,7 @@ export default function PendingApprovalScreen() {
             Periksa Lagi
           </button>
           <button
-            onClick={() => logout({ logoutParams: { returnTo: window.location.origin, federated: true } })}
+            onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
             className="text-sm font-medium text-gray-500 hover:text-gray-700"
           >
             Keluar
