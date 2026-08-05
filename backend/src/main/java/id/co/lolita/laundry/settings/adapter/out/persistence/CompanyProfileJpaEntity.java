@@ -32,32 +32,16 @@ class CompanyProfileJpaEntity {
     @Column(nullable = false, length = 30)
     private String phone;
 
-    @Column(name = "bank_beneficiary", nullable = false, length = 100)
-    private String bankBeneficiary;
-
-    @Column(name = "bank_name", nullable = false, length = 50)
-    private String bankName;
-
-    @Column(name = "bank_account", nullable = false, length = 50)
-    private String bankAccount;
-
-    @Column(name = "bank_holder", nullable = false, length = 100)
-    private String bankHolder;
-
     static CompanyProfileJpaEntity fromDomain(CompanyProfile p) {
         var e = new CompanyProfileJpaEntity();
         e.id = p.getId() == null ? CompanyProfile.SINGLETON_ID : p.getId();
         e.companyName = p.getCompanyName();
         e.address = p.getAddress();
         e.phone = p.getPhone();
-        e.bankBeneficiary = p.getBankBeneficiary();
-        e.bankName = p.getBankName();
-        e.bankAccount = p.getBankAccount();
-        e.bankHolder = p.getBankHolder();
         return e;
     }
 
     CompanyProfile toDomain() {
-        return new CompanyProfile(id, companyName, address, phone, bankBeneficiary, bankName, bankAccount, bankHolder);
+        return new CompanyProfile(id, companyName, address, phone);
     }
 }

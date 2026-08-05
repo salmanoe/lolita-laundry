@@ -8,6 +8,7 @@ import DepartmentFormModal from '../components/DepartmentFormModal'
 import SetPriceModal from '../components/SetPriceModal'
 import { billingModeLabel } from '../lib/labels'
 import { indexById, useLookupList } from '../lib/lookups'
+import { bankAccountLabel, useBankAccountOptions } from '../lib/bankAccounts'
 import type { Client, Department, Item, PriceListEntry } from '../types/api'
 
 const rupiah = (n: number) =>
@@ -54,6 +55,7 @@ export default function ClientDetailPage() {
 
   const typesById = indexById(useLookupList('client-types').data)
   const unitsById = indexById(useLookupList('item-units').data)
+  const bankAccountsQ = useBankAccountOptions()
 
   if (clientQ.isLoading) return <div className="text-sm text-gray-400">Memuat data klien...</div>
   if (clientQ.error || !clientQ.data) return <div className="text-sm text-red-500">Gagal memuat data klien.</div>
@@ -115,6 +117,14 @@ export default function ClientDetailPage() {
         <Info label="Kontak" value={client.contactPerson ?? '—'} />
         <Info label="Telepon" value={client.phone ?? '—'} />
         <Info label="Alamat" value={client.address ?? '—'} />
+        <Info
+          label="Rekening Transfer"
+          value={
+            <span className={client.bankAccountId == null ? 'text-gray-400' : undefined}>
+              {bankAccountLabel(client.bankAccountId, bankAccountsQ.data)}
+            </span>
+          }
+        />
         <Info label="Token Order" value={<span className="font-mono text-xs">{client.orderToken}</span>} />
       </dl>
 

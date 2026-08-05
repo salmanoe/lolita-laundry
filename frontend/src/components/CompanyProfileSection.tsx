@@ -10,10 +10,12 @@ const field =
 const label = 'block text-xs font-medium text-gray-600 mb-1'
 
 /**
- * The company profile (letterhead + bank-transfer details) printed on every invoice and monthly
- * billing PDF. A single editable record. SUPER_ADMIN may edit (this lives on the SUPER_ADMIN-only
- * Master Data screen). Changing it updates DRAFT billings on the next render but never rewrites an
- * already-issued/paid document (the backend freezes a snapshot at issue time).
+ * The company letterhead printed on every invoice and monthly billing PDF. A single editable
+ * record. SUPER_ADMIN may edit (this lives on the SUPER_ADMIN-only Master Data screen). Changing it
+ * updates DRAFT billings on the next render but never rewrites an already-issued/paid document (the
+ * backend freezes a snapshot at issue time).
+ *
+ * <p>Bank-transfer details are not here — they are per-client, managed in BankAccountsSection.
  */
 export default function CompanyProfileSection() {
   const { getAccessTokenSilently } = useAuth()
@@ -51,7 +53,7 @@ export default function CompanyProfileSection() {
       <div className="mb-3">
         <h2 className="text-base font-semibold text-gray-800">Profil Perusahaan</h2>
         <p className="text-xs text-gray-500">
-          Kop surat &amp; rekening yang tampil pada PDF invoice dan tagihan.
+          Kop surat yang tampil pada PDF invoice dan tagihan.
           {!canEdit && ' Hanya Admin Super yang dapat mengubah.'}
         </p>
       </div>
@@ -79,34 +81,6 @@ export default function CompanyProfileSection() {
               <label className={label}>No. Telepon / HP</label>
               <input className={field} readOnly={!canEdit} {...register('phone', { required: true })} />
               {errors.phone && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
-            </div>
-          </div>
-
-          <div className="border-t pt-4">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Rekening Transfer
-            </h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className={label}>Penerima</label>
-                <input className={field} readOnly={!canEdit} {...register('bankBeneficiary', { required: true })} />
-                {errors.bankBeneficiary && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
-              </div>
-              <div>
-                <label className={label}>Bank</label>
-                <input className={field} readOnly={!canEdit} {...register('bankName', { required: true })} />
-                {errors.bankName && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
-              </div>
-              <div>
-                <label className={label}>No. Rekening</label>
-                <input className={field} readOnly={!canEdit} {...register('bankAccount', { required: true })} />
-                {errors.bankAccount && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
-              </div>
-              <div>
-                <label className={label}>Nama Pemilik Rekening</label>
-                <input className={field} readOnly={!canEdit} {...register('bankHolder', { required: true })} />
-                {errors.bankHolder && <p className="mt-1 text-xs text-red-600">Wajib diisi.</p>}
-              </div>
             </div>
           </div>
 

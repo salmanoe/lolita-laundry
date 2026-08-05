@@ -1,8 +1,9 @@
 import { useForm } from 'react-hook-form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, ApiError } from '../api/client'
+import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import Modal from './Modal'
+import ModalFormActions from './ModalFormActions'
 import type { Department } from '../types/api'
 
 interface FormValues {
@@ -73,28 +74,7 @@ export default function DepartmentFormModal({ open, onClose, clientId, departmen
           </label>
         )}
 
-        {mutation.isError && (
-          <p className="text-sm text-red-600">
-            {mutation.error instanceof ApiError ? mutation.error.detail : 'Gagal menyimpan.'}
-          </p>
-        )}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
-          >
-            Batal
-          </button>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Menyimpan...' : 'Simpan'}
-          </button>
-        </div>
+        <ModalFormActions onClose={onClose} error={mutation.error} isPending={mutation.isPending} />
       </form>
     </Modal>
   )

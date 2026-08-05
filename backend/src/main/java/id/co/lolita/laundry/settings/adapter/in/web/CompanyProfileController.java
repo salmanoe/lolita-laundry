@@ -15,9 +15,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * SUPER_ADMIN-only company-profile editor. The profile (letterhead + bank details) appears on every
- * invoice and monthly-billing PDF; PDFs read it through the settings::api gateway, so locking the
- * REST endpoint to SUPER_ADMIN does not affect billing rendering.
+ * SUPER_ADMIN-only company-profile editor. The letterhead appears on every invoice and
+ * monthly-billing PDF; PDFs read it through the settings::api gateway, so locking the REST
+ * endpoint to SUPER_ADMIN does not affect billing rendering. Bank-transfer details are edited
+ * separately in {@link BankAccountController} — they are chosen per client, not company-wide.
  */
 @RestController
 @RequestMapping("/api/company-profile")
@@ -39,7 +40,6 @@ class CompanyProfileController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     CompanyProfileResponse update(@Valid @RequestBody UpdateCompanyProfileRequest request) {
         return CompanyProfileResponse.from(updateProfile.update(new UpdateCompanyProfileCommand(
-                request.companyName(), request.address(), request.phone(), request.bankBeneficiary(),
-                request.bankName(), request.bankAccount(), request.bankHolder())));
+                request.companyName(), request.address(), request.phone())));
     }
 }

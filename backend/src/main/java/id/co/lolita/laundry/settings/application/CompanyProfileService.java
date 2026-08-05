@@ -11,8 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Manages the singleton company profile and exposes it to other modules. Reads fall back to
- * {@link CompanyProfile#defaults()} until the OWNER saves a profile, so PDF rendering always has
- * company details available.
+ * {@link CompanyProfile#defaults()} until the SUPER_ADMIN saves a profile, so PDF rendering always
+ * has company details available.
  */
 @Service
 @Transactional
@@ -30,8 +30,7 @@ class CompanyProfileService implements GetCompanyProfileUseCase, UpdateCompanyPr
     @Override
     public CompanyProfile update(UpdateCompanyProfileCommand command) {
         var profile = repository.find().orElseGet(CompanyProfile::defaults);
-        profile.update(command.companyName(), command.address(), command.phone(), command.bankBeneficiary(),
-                command.bankName(), command.bankAccount(), command.bankHolder());
+        profile.update(command.companyName(), command.address(), command.phone());
         return repository.save(profile);
     }
 
@@ -39,7 +38,6 @@ class CompanyProfileService implements GetCompanyProfileUseCase, UpdateCompanyPr
     @Transactional(readOnly = true)
     public CompanyProfileView current() {
         var p = get();
-        return new CompanyProfileView(p.getCompanyName(), p.getAddress(), p.getPhone(), p.getBankBeneficiary(),
-                p.getBankName(), p.getBankAccount(), p.getBankHolder());
+        return new CompanyProfileView(p.getCompanyName(), p.getAddress(), p.getPhone());
     }
 }

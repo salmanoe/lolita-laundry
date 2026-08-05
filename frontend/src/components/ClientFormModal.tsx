@@ -1,10 +1,12 @@
 import { useForm } from 'react-hook-form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { apiFetch, ApiError } from '../api/client'
+import { apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import Modal from './Modal'
+import ModalFormActions from './ModalFormActions'
 import { billingModeLabel } from '../lib/labels'
 import { useLookupList } from '../lib/lookups'
+import { useBankAccountOptions } from '../lib/bankAccounts'
 import type { Client, BillingMode } from '../types/api'
 
 interface FormValues {
@@ -15,6 +17,7 @@ interface FormValues {
   contactPerson: string
   phone: string
   address: string
+  bankAccountId: string   // '' = use the default account (select values are strings)
 }
 
 interface Props {
@@ -35,6 +38,14 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
   const clientTypes = useLookupList('client-types')
   const typeOptions = (clientTypes.data ?? []).filter((t) => t.active || t.id === client?.clientTypeId)
 
+  // Only active accounts can be picked, but keep an existing (now inactive) assignment listed so
+  // editing another field doesn't silently reset it.
+  const bankAccounts = useBankAccountOptions()
+  const defaultAccount = (bankAccounts.data ?? []).find((a) => a.defaultAccount)
+  const bankOptions = (bankAccounts.data ?? []).filter(
+    (a) => a.active || a.id === client?.bankAccountId,
+  )
+
   const {
     register,
     handleSubmit,
@@ -48,6 +59,7 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
       contactPerson: client?.contactPerson ?? '',
       phone: client?.phone ?? '',
       address: client?.address ?? '',
+      bankAccountId: client?.bankAccountId != null ? String(client.bankAccountId) : '',
     },
   })
 
@@ -61,6 +73,7 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
         contactPerson: v.contactPerson || null,
         phone: v.phone || null,
         address: v.address || null,
+        bankAccountId: v.bankAccountId ? Number(v.bankAccountId) : null,
       }
       if (editing) {
         return apiFetch(`/api/clients/${client!.id}`, {
@@ -146,24 +159,25 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
           <textarea className={field} rows={2} {...register('address')} />
         </div>
 
-        {mutation.isError && (
-          <p className="text-sm text-red-600">
-            {mutation.error instanceof ApiError ? mutation.error.detail : 'Gagal menyimpan.'}
+        <div>
+          <label className={label}>Rekening Transfer</label>
+          <select className={field} {...register('bankAccountId')}>
+            <option value="">
+              {defaultAccount ? `— Gunakan default (${defaultAccount.label}) —` : '— Gunakan rekening default —'}
+            </option>
+            {bankOptions.map((a) => (
+              <option key={a.id} value={String(a.id)}>
+                {a.active ? a.label : `${a.label} (nonaktif)`}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-400">
+            Rekening tujuan transfer pada tagihan bulanan klien ini. Tagihan yang sudah diterbitkan
+            tidak berubah.
           </p>
-        )}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="rounded-md px-4 py-2 text-sm text-gray-600 hover:bg-gray-100">
-            Batal
-          </button>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Menyimpan...' : 'Simpan'}
-          </button>
         </div>
+
+        <ModalFormActions onClose={onClose} error={mutation.error} isPending={mutation.isPending} />
       </form>
     </Modal>
   )

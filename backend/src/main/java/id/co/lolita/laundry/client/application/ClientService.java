@@ -6,6 +6,7 @@ import id.co.lolita.laundry.client.domain.ClientItemDepartment;
 import id.co.lolita.laundry.client.domain.ClientPriceList;
 import id.co.lolita.laundry.client.domain.Department;
 import id.co.lolita.laundry.client.domain.port.in.*;
+import id.co.lolita.laundry.client.domain.port.out.BankAccountLookupGateway;
 import id.co.lolita.laundry.client.domain.port.out.ClientItemDepartmentRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientPriceListRepository;
 import id.co.lolita.laundry.client.domain.port.out.ClientRepository;
@@ -38,6 +39,7 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     private final ClientPriceListRepository priceListRepository;
     private final ClientItemDepartmentRepository itemDepartmentRepository;
     private final ClientTypeRepository clientTypeRepository;
+    private final BankAccountLookupGateway bankAccounts;
 
     // ── GetClientUseCase ──
 
@@ -66,11 +68,12 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
             throw new IllegalArgumentException("Client code '%s' is already in use".formatted(command.clientCode()));
         }
         requireClientTypeExists(command.clientTypeId());
+        requireBankAccountAssignable(command.bankAccountId());
         var client = new Client(
                 null, command.name(), command.clientCode(),
                 command.clientTypeId(), command.billingMode(),
                 command.contactPerson(), command.phone(), command.address(),
-                UUID.randomUUID(), true, Instant.now()
+                UUID.randomUUID(), command.bankAccountId(), true, Instant.now()
         );
         return clientRepository.save(client);
     }
@@ -80,14 +83,32 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
     public Client updateClient(UpdateClientCommand command) {
         var client = getClientById(command.id());
         requireClientTypeExists(command.clientTypeId());
+        requireBankAccountAssignable(command.bankAccountId());
         client.update(command.name(), command.clientTypeId(), command.billingMode(),
-                command.contactPerson(), command.phone(), command.address());
+                command.contactPerson(), command.phone(), command.address(), command.bankAccountId());
         return clientRepository.save(client);
     }
 
     private void requireClientTypeExists(Long clientTypeId) {
         if (clientTypeRepository.findById(clientTypeId).isEmpty()) {
             throw new NotFoundException("Client type not found: " + clientTypeId);
+        }
+    }
+
+    /**
+     * Null is the normal case — it means "bill to the default account". An explicit assignment must
+     * name an account that exists and is still active, so a stale pick from a cached dropdown is
+     * rejected here rather than surfacing as an FK violation.
+     */
+    private void requireBankAccountAssignable(Long bankAccountId) {
+        if (bankAccountId == null) {
+            return;
+        }
+        var account = bankAccounts.findById(bankAccountId)
+                .orElseThrow(() -> new NotFoundException("Bank account not found: " + bankAccountId));
+        if (!account.active()) {
+            throw new IllegalArgumentException(
+                    "Rekening '%s' sudah nonaktif dan tidak dapat dipilih".formatted(account.label()));
         }
     }
 
@@ -231,7 +252,7 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
 
     private static ClientView toView(Client c) {
         return new ClientView(c.getId(), c.getName(), c.getClientCode(),
-                c.isActive(), c.getBillingMode() == BillingMode.PER_DEPARTMENT);
+                c.isActive(), c.getBillingMode() == BillingMode.PER_DEPARTMENT, c.getBankAccountId());
     }
 
     // ── ClientPricingQuery (cross-module read API) ──

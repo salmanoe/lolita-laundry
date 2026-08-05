@@ -46,6 +46,10 @@ class ClientJpaEntity {
     @Column(name = "order_token", nullable = false, unique = true)
     private UUID orderToken;
 
+    /** Null = bill to the default bank account. */
+    @Column(name = "bank_account_id")
+    private Long bankAccountId;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -63,6 +67,7 @@ class ClientJpaEntity {
         e.phone = client.getPhone();
         e.address = client.getAddress();
         e.orderToken = client.getOrderToken();
+        e.bankAccountId = client.getBankAccountId();
         e.active = client.isActive();
         e.createdAt = client.getCreatedAt();
         return e;
@@ -70,6 +75,6 @@ class ClientJpaEntity {
 
     Client toDomain() {
         return new Client(id, name, clientCode, clientTypeId, billingMode,
-                contactPerson, phone, address, orderToken, active, createdAt);
+                contactPerson, phone, address, orderToken, bankAccountId, active, createdAt);
     }
 }

@@ -2,6 +2,7 @@ package id.co.lolita.laundry.billing;
 
 import id.co.lolita.laundry.client.domain.port.in.ClientDirectoryQuery;
 import id.co.lolita.laundry.order.domain.port.in.DeliveredOrderQuery;
+import id.co.lolita.laundry.settings.domain.port.in.BankAccountQuery;
 import id.co.lolita.laundry.settings.domain.port.in.CompanyProfileQuery;
 import id.co.lolita.laundry.storage.domain.port.out.StoragePort;
 import org.junit.jupiter.api.Test;
@@ -12,7 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import java.util.concurrent.Executor;
 
 /**
- * Bootstraps only the billing module in isolation. Billing reads the order, client and
+ * Bootstraps only the billing module in isolation. Billing reads the order, client, settings and
  * storage modules through their exposed named interfaces; those provider beans live in
  * modules that are NOT started here, so they are supplied as mocks. If the context loads, the
  * event listener → inbound port → application service → outbound port/gateway → adapter wiring
@@ -28,6 +29,8 @@ class BillingModuleTest {
     ClientDirectoryQuery clientDirectoryQuery;
     @MockitoBean
     CompanyProfileQuery companyProfileQuery;
+    @MockitoBean
+    BankAccountQuery bankAccountQuery;
     @MockitoBean
     StoragePort storagePort;
     @MockitoBean
