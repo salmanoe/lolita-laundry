@@ -9,7 +9,11 @@ import java.util.Optional;
  */
 public interface BillingClientGateway {
 
-    record ClientInfo(Long id, String name, String clientCode, boolean perDepartment) {
+    /**
+     * @param bankAccountId which company bank account this client's invoices are payable to;
+     *                      null means the default account
+     */
+    record ClientInfo(Long id, String name, String clientCode, boolean perDepartment, Long bankAccountId) {
     }
 
     Optional<ClientInfo> findById(Long clientId);

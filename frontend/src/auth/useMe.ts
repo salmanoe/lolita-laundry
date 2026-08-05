@@ -1,7 +1,28 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from '../api/client'
 import { useAuth } from './AuthContext'
-import type { Me } from '../types/api'
+import type { Me, Role } from '../types/api'
+
+/**
+ * Mock-mode role (dev only).
+ *
+ * In mock auth there is no JWT, so the dev-profile backend has no `Authentication` and
+ * `GET /api/me` answers 204 — the caller resolves to *no* role. Most screens fail open on an
+ * unresolved role, but the ones that gate on an explicit role (the company-profile and
+ * bank-account editors, the dashboard's role branch, the Pengguna nav entry) then behave as if
+ * you were the *least* privileged user, which makes the admin UI impossible to review locally.
+ *
+ * Setting `VITE_AUTH_MOCK_ROLE` in `.env.local` pins the role instead. Defaults to SUPER_ADMIN so
+ * a fresh mock session sees the whole app; set it to FINANCE_STAFF or DAILY_STAFF to review those
+ * shells. Gated on `VITE_AUTH_MOCK`, which is dev-only and gitignored — a production build has it
+ * unset, so this branch is dead code there, exactly like MockAuthProvider.
+ */
+const MOCK_AUTH = import.meta.env.VITE_AUTH_MOCK === 'true'
+const MOCK_ME: Me = {
+  id: 0,
+  fullName: 'Dev User (Mock)',
+  role: ((import.meta.env.VITE_AUTH_MOCK_ROLE as Role | undefined) ?? 'SUPER_ADMIN'),
+}
 
 /**
  * Fetches the current Lolita user (id, name, role) once and caches it. Returns `undefined`
@@ -33,6 +54,9 @@ export function useMe() {
       return 60_000
     },
     queryFn: async () => {
+      // Dev mock auth: there is no principal for the backend to resolve, so answer locally with
+      // the pinned role rather than letting /api/me's 204 strip every role-gated affordance.
+      if (MOCK_AUTH) return MOCK_ME
       const token = await getAccessTokenSilently()
       // 204 → apiFetch returns undefined; normalise to null so react-query treats it as resolved data.
       const me = await apiFetch<Me | undefined>('/api/me', { token })

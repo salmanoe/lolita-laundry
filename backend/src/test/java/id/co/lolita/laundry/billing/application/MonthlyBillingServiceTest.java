@@ -9,6 +9,7 @@ import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway;
 import id.co.lolita.laundry.billing.domain.port.out.BillingClientGateway.ClientInfo;
 import id.co.lolita.laundry.billing.domain.port.out.BillingStoragePort;
 import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway;
+import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway.BankInfo;
 import id.co.lolita.laundry.billing.domain.port.out.CompanyProfileGateway.CompanyInfo;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway;
 import id.co.lolita.laundry.billing.domain.port.out.DeliveredOrderGateway.DeliveredOrder;
@@ -83,16 +84,25 @@ class MonthlyBillingServiceTest {
     private static final long COMBINED_CLIENT = 1L;
     private static final long PBS = 7L;
 
+    /** The bank account PBS is explicitly assigned to (the company account). */
+    private static final long COMPANY_ACCOUNT = 2L;
+
     private static final CompanyInfo COMPANY = new CompanyInfo("Lolita Laundry",
-            "Jl. Sukaraja No. 318 Bandung", "082318359775", "Alban Valentino Ramatir",
-            "Bank BCA", "4061792362", "Lolita Laundry");
+            "Jl. Sukaraja No. 318 Bandung", "082318359775");
+
+    /** What the settings module resolves for a client with no explicit assignment. */
+    private static final BankInfo DEFAULT_BANK =
+            new BankInfo("Alban Valentino Ramatir", "Bank BCA", "4061792362", "Lolita Laundry");
+
+    private static final BankInfo COMPANY_BANK =
+            new BankInfo("PT Lolita Laundry", "Bank Mandiri", "1230004567", "PT Lolita Laundry");
 
     private static ClientInfo combined() {
-        return new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false);
+        return new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false, null);
     }
 
     private static ClientInfo perDepartment() {
-        return new ClientInfo(PBS, "Pasar Baru Square", "PBS", true);
+        return new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, null);
     }
 
     private static DeliveredOrder order(String number, Long deptId, String deptName, String total) {
@@ -103,8 +113,9 @@ class MonthlyBillingServiceTest {
     }
 
     private void stubPdfAndStorageAndSave() {
-        // DRAFT billings render from the live company profile.
+        // DRAFT billings render from the live company profile + the client's current bank account.
         when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(any())).thenReturn(DEFAULT_BANK);
         when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(any(), any())).thenReturn("billings/key.pdf");
         when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -249,6 +260,7 @@ class MonthlyBillingServiceTest {
         when(billingRepository.findById(50L)).thenReturn(Optional.of(draft));
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(null)).thenReturn(DEFAULT_BANK);
         when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("billings/BILL-AYI-202606.pdf"), any())).thenReturn("billings/BILL-AYI-202606.pdf");
         when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -261,6 +273,72 @@ class MonthlyBillingServiceTest {
         assertThat(result.getBankAccount()).isEqualTo("4061792362");
         assertThat(result.getPdfUrl()).isEqualTo("billings/BILL-AYI-202606.pdf");
         verify(pdf).renderMonthlyBilling(any());
+    }
+
+    @Test
+    void updateStatus_issuing_freezesTheClientsOwnBankAccount_notTheDefault() {
+        // PBS bills to the company account. Issuing must freeze that account, not the default one.
+        var draft = new MonthlyBilling(51L, "BILL-PBS-202606", PBS, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
+        var pbs = new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, COMPANY_ACCOUNT);
+        when(billingRepository.findById(51L)).thenReturn(Optional.of(draft));
+        when(clients.findById(PBS)).thenReturn(Optional.of(pbs));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(COMPANY_ACCOUNT)).thenReturn(COMPANY_BANK);
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(any(), any())).thenReturn("billings/BILL-PBS-202606.pdf");
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.updateStatus(new UpdateStatusCommand(51L, BillingStatus.ISSUED));
+
+        assertThat(result.getBankName()).isEqualTo("Bank Mandiri");
+        assertThat(result.getBankAccount()).isEqualTo("1230004567");
+        assertThat(result.getBankHolder()).isEqualTo("PT Lolita Laundry");
+        // The letterhead is still company-wide.
+        assertThat(result.getCompanyName()).isEqualTo("Lolita Laundry");
+    }
+
+    @Test
+    void draftRender_usesTheClientsCurrentBankAccount() {
+        // A DRAFT follows the client's assignment live, so a reassignment shows up on the next render.
+        var draft = new MonthlyBilling(52L, "BILL-PBS-202606", PBS, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, "billings/old.pdf", null,
+                Instant.now(), List.of());
+        var pbs = new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, COMPANY_ACCOUNT);
+        when(billingRepository.findAll(null, null, null)).thenReturn(List.of(draft));
+        when(clients.findById(PBS)).thenReturn(Optional.of(pbs));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(COMPANY_ACCOUNT)).thenReturn(COMPANY_BANK);
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(any(), any())).thenReturn("billings/BILL-PBS-202606.pdf");
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.regenerateAllPdfs();
+
+        var doc = ArgumentCaptor.forClass(MonthlyBillingDocument.class);
+        verify(pdf).renderMonthlyBilling(doc.capture());
+        assertThat(doc.getValue().company().bankAccount()).isEqualTo("1230004567");
+        assertThat(doc.getValue().company().bankName()).isEqualTo("Bank Mandiri");
+    }
+
+    @Test
+    void draftRender_unassignedClientFallsBackToTheDefaultAccount() {
+        var draft = new MonthlyBilling(53L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, "billings/old.pdf", null,
+                Instant.now(), List.of());
+        when(billingRepository.findAll(null, null, null)).thenReturn(List.of(draft));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));   // bankAccountId == null
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(null)).thenReturn(DEFAULT_BANK);
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(any(), any())).thenReturn("billings/BILL-AYI-202606.pdf");
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.regenerateAllPdfs();
+
+        var doc = ArgumentCaptor.forClass(MonthlyBillingDocument.class);
+        verify(pdf).renderMonthlyBilling(doc.capture());
+        assertThat(doc.getValue().company().bankAccount()).isEqualTo("4061792362");
     }
 
     @Test
@@ -283,13 +361,16 @@ class MonthlyBillingServiceTest {
     void regenerateAllPdfs_rerendersIssuedFromFrozenSnapshot_notLiveProfile() {
         // A PAID billing with an old PDF and a frozen company snapshot. Bulk refresh re-renders it
         // (layout-only) from that snapshot — never the live profile, so history is not rewritten.
+        // The client has since been reassigned to a different bank account: that must not leak in
+        // either, or an invoice already paid would name an account it was never payable to.
         var paid = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.PAID, "billings/old.pdf", null,
                 Instant.now(), List.of());
         paid.captureCompany("Lolita Laundry", "OLD ADDRESS", "0000", "Old Beneficiary",
                 "Bank BCA", "9999999999", "Lolita Laundry");
+        var reassigned = new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false, COMPANY_ACCOUNT);
         when(billingRepository.findAll(null, null, null)).thenReturn(List.of(paid));
-        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(reassigned));
         when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("billings/BILL-AYI-202606.pdf"), any())).thenReturn("billings/BILL-AYI-202606.pdf");
         when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
