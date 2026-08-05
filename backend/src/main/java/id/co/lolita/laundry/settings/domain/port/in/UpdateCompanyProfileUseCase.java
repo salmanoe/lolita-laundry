@@ -6,7 +6,6 @@ public interface UpdateCompanyProfileUseCase {
 
     CompanyProfile update(UpdateCompanyProfileCommand command);
 
-    record UpdateCompanyProfileCommand(String companyName, String address, String phone, String bankBeneficiary,
-                                       String bankName, String bankAccount, String bankHolder) {
+    record UpdateCompanyProfileCommand(String companyName, String address, String phone) {
     }
 }

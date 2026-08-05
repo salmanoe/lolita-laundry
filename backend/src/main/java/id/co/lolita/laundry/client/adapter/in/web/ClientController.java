@@ -61,7 +61,7 @@ class ClientController {
     ClientResponse createClient(@Valid @RequestBody CreateClientRequest request) {
         var command = new CreateClientCommand(
                 request.name(), request.clientCode(), request.clientTypeId(), request.billingMode(),
-                request.contactPerson(), request.phone(), request.address()
+                request.contactPerson(), request.phone(), request.address(), request.bankAccountId()
         );
         return ClientResponse.from(manageClient.createClient(command));
     }
@@ -71,7 +71,7 @@ class ClientController {
     ClientResponse updateClient(@PathVariable Long id, @Valid @RequestBody UpdateClientRequest request) {
         var command = new UpdateClientCommand(
                 id, request.name(), request.clientTypeId(), request.billingMode(),
-                request.contactPerson(), request.phone(), request.address()
+                request.contactPerson(), request.phone(), request.address(), request.bankAccountId()
         );
         return ClientResponse.from(manageClient.updateClient(command));
     }

@@ -20,6 +20,6 @@ class BillingClientGatewayAdapter implements BillingClientGateway {
     @Override
     public Optional<ClientInfo> findById(Long clientId) {
         return clients.findById(clientId)
-                .map(c -> new ClientInfo(c.id(), c.name(), c.clientCode(), c.perDepartment()));
+                .map(c -> new ClientInfo(c.id(), c.name(), c.clientCode(), c.perDepartment(), c.bankAccountId()));
     }
 }

@@ -12,7 +12,12 @@ import java.util.UUID;
  */
 public interface ClientDirectoryQuery {
 
-    record ClientView(Long id, String name, String clientCode, boolean active, boolean perDepartment) {
+    /**
+     * @param bankAccountId which company bank account this client's invoices are payable to;
+     *                      null means the default account
+     */
+    record ClientView(Long id, String name, String clientCode, boolean active, boolean perDepartment,
+                      Long bankAccountId) {
     }
 
     record DepartmentView(Long id, String name) {

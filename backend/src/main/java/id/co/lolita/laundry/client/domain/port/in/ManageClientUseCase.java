@@ -5,15 +5,18 @@ import id.co.lolita.laundry.client.domain.Client;
 
 public interface ManageClientUseCase {
 
+    /**
+     * {@code bankAccountId} is optional — null means the client bills to the default bank account.
+     */
     record CreateClientCommand(
             String name, String clientCode, Long clientTypeId, BillingMode billingMode,
-            String contactPerson, String phone, String address
+            String contactPerson, String phone, String address, Long bankAccountId
     ) {
     }
 
     record UpdateClientCommand(
             Long id, String name, Long clientTypeId, BillingMode billingMode,
-            String contactPerson, String phone, String address
+            String contactPerson, String phone, String address, Long bankAccountId
     ) {
     }
 

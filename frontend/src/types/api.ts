@@ -45,15 +45,36 @@ export interface Page<T> {
   totalPages: number
 }
 
-/** Company letterhead + bank details printed on PDFs — singleton, edited in Master Data (SUPER_ADMIN only). */
+/** Company letterhead printed on PDFs — singleton, edited in Master Data (SUPER_ADMIN only). */
 export interface CompanyProfile {
-  companyName:     string
-  address:         string
-  phone:           string
-  bankBeneficiary: string
-  bankName:        string
-  bankAccount:     string
-  bankHolder:      string
+  companyName: string
+  address:     string
+  phone:       string
+}
+
+/**
+ * One of the company's bank accounts, printed in the transfer block of a monthly billing invoice.
+ * Each client bills to one of these; the `default` account covers every client with no explicit
+ * assignment. Managed in Master Data (SUPER_ADMIN only).
+ */
+export interface BankAccount {
+  id:             number
+  label:          string
+  beneficiary:    string
+  bankName:       string
+  accountNumber:  string
+  accountHolder:  string
+  defaultAccount: boolean
+  active:         boolean
+  sortOrder:      number
+}
+
+/** Label-only view of a bank account, for rendering and picking a client's assignment. */
+export interface BankAccountOption {
+  id:             number
+  label:          string
+  defaultAccount: boolean
+  active:         boolean
 }
 
 /** Reference data (item units, client types) — managed via Master Data. */
@@ -85,6 +106,7 @@ export interface Client {
   phone:         string | null
   address:       string | null
   orderToken:    string
+  bankAccountId: number | null  // → bank-accounts; null = the default account
   active:        boolean
   createdAt:     string   // ISO-8601 instant string
 }

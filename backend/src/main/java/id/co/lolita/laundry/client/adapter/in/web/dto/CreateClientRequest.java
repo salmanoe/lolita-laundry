@@ -14,6 +14,8 @@ public record CreateClientRequest(
         @NotNull BillingMode billingMode,
         @Size(max = 100) String contactPerson,
         @Size(max = 20) String phone,
-        String address
+        String address,
+        /* Which bank account the client's invoices are payable to. Null = the default account. */
+        Long bankAccountId
 ) {
 }
