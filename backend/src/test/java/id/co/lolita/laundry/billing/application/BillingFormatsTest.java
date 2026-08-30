@@ -46,8 +46,23 @@ class BillingFormatsTest {
 
     @Test
     void periodDescription_spansFirstToLastDayOfMonth() {
-        assertThat(BillingFormats.periodDescription(2026, 6)).isEqualTo("Laundry Periode 1 June - 30 June 2026");
-        assertThat(BillingFormats.periodDescription(2026, 2)).isEqualTo("Laundry Periode 1 February - 28 February 2026");
+        assertThat(BillingFormats.periodDescription(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30)))
+                .isEqualTo("Laundry Periode 1 June - 30 June 2026");
+        assertThat(BillingFormats.periodDescription(LocalDate.of(2026, 2, 1), LocalDate.of(2026, 2, 28)))
+                .isEqualTo("Laundry Periode 1 February - 28 February 2026");
+    }
+
+    @Test
+    void periodDescription_spansTwoMonthsForACutOffCycle() {
+        // A client billing on the 25th: the period runs 26 Jul - 25 Aug, so both month names show.
+        assertThat(BillingFormats.periodDescription(LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25)))
+                .isEqualTo("Laundry Periode 26 July - 25 August 2026");
+    }
+
+    @Test
+    void periodDescription_showsBothYearsWhenThePeriodCrossesNewYear() {
+        assertThat(BillingFormats.periodDescription(LocalDate.of(2026, 12, 26), LocalDate.of(2027, 1, 25)))
+                .isEqualTo("Laundry Periode 26 December 2026 - 25 January 2027");
     }
 
     @Test

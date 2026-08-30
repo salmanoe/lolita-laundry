@@ -5,7 +5,6 @@ import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
-import java.time.YearMonth;
 
 /**
  * Indonesian-locale formatting for billing documents and helpers for document numbering.
@@ -83,13 +82,21 @@ final class BillingFormats {
     }
 
     /**
-     * The single description line on the monthly invoice — the full billed month, first to last
-     * day, e.g. "Laundry Periode 1 June - 30 June 2026". English month names match the template.
+     * The single description line on the monthly invoice — the period's billed date range.
+     * English month names match the template.
+     *
+     * <p>A calendar-month period renders exactly as it always has, e.g.
+     * {@code "Laundry Periode 1 June - 30 June 2026"} (the year appears once, on the end date).
+     * A cut-off cycle spans two months, so both month names appear:
+     * {@code "Laundry Periode 26 July - 25 August 2026"}; when it also spans two years, both
+     * years are shown: {@code "Laundry Periode 26 December 2026 - 25 January 2027"}.
      */
-    static String periodDescription(int year, int month) {
-        var ym = YearMonth.of(year, month);
-        String m = MONTHS_EN[month - 1];
-        return "Laundry Periode 1 %s - %d %s %d".formatted(m, ym.lengthOfMonth(), m, year);
+    static String periodDescription(LocalDate start, LocalDate end) {
+        String startPart = start.getYear() == end.getYear()
+                ? "%d %s".formatted(start.getDayOfMonth(), MONTHS_EN[start.getMonthValue() - 1])
+                : "%d %s %d".formatted(start.getDayOfMonth(), MONTHS_EN[start.getMonthValue() - 1], start.getYear());
+        return "Laundry Periode %s - %d %s %d".formatted(
+                startPart, end.getDayOfMonth(), MONTHS_EN[end.getMonthValue() - 1], end.getYear());
     }
 
     // ── Terbilang (Indonesian amount in words) ──

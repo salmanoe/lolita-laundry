@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { openDownloadUrl } from '../lib/download'
-import { billingStatusBadge, billingStatusLabel, monthName, nextBillingStatus } from '../lib/labels'
+import { billingStatusBadge, billingStatusLabel, isoDateLabel, monthName, nextBillingStatus, periodRangeLabel } from '../lib/labels'
 import type { Client, MonthlyBilling } from '../types/api'
 
 const rupiah = (n: number) =>
@@ -21,6 +21,8 @@ export default function BillingDetailPage() {
     queryFn: async () => apiFetch<MonthlyBilling>(`/api/billing/${billingId}`, { token: await token() }),
   })
   const billing = billingQ.data
+  // Only a client on a billing cut-off cycle has a range worth showing next to "Agustus 2026".
+  const periodRange = billing ? periodRangeLabel(billing.periodStart, billing.periodEnd) : null
 
   const clientQ = useQuery({
     queryKey: ['client', billing?.clientId],
@@ -123,8 +125,16 @@ export default function BillingDetailPage() {
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg border bg-white p-6 text-sm shadow-sm md:grid-cols-4">
         <Info label="Klien" value={clientQ.data?.name ?? '—'} />
         {billing.departmentId && <Info label="Departemen" value={deptName ?? '—'} />}
-        <Info label="Periode" value={`${monthName[billing.periodMonth]} ${billing.periodYear}`} />
-        <Info label="Tanggal Tagihan" value={billing.invoiceDate} />
+        <Info
+          label="Periode"
+          value={
+            <>
+              {monthName[billing.periodMonth]} {billing.periodYear}
+              {periodRange && <span className="ml-1 text-xs text-gray-400">({periodRange})</span>}
+            </>
+          }
+        />
+        <Info label="Tanggal Tagihan" value={isoDateLabel(billing.invoiceDate)} />
         <Info label="Total" value={<span className="font-semibold">{rupiah(billing.total)}</span>} />
         {billing.notes && <Info label="Catatan" value={billing.notes} />}
       </dl>

@@ -73,7 +73,7 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
                 null, command.name(), command.clientCode(),
                 command.clientTypeId(), command.billingMode(),
                 command.contactPerson(), command.phone(), command.address(),
-                UUID.randomUUID(), command.bankAccountId(), true, Instant.now()
+                UUID.randomUUID(), command.bankAccountId(), command.billingCycleDay(), true, Instant.now()
         );
         return clientRepository.save(client);
     }
@@ -85,7 +85,8 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
         requireClientTypeExists(command.clientTypeId());
         requireBankAccountAssignable(command.bankAccountId());
         client.update(command.name(), command.clientTypeId(), command.billingMode(),
-                command.contactPerson(), command.phone(), command.address(), command.bankAccountId());
+                command.contactPerson(), command.phone(), command.address(), command.bankAccountId(),
+                command.billingCycleDay());
         return clientRepository.save(client);
     }
 
@@ -252,7 +253,8 @@ class ClientService implements GetClientUseCase, ManageClientUseCase, ManageDepa
 
     private static ClientView toView(Client c) {
         return new ClientView(c.getId(), c.getName(), c.getClientCode(),
-                c.isActive(), c.getBillingMode() == BillingMode.PER_DEPARTMENT, c.getBankAccountId());
+                c.isActive(), c.getBillingMode() == BillingMode.PER_DEPARTMENT, c.getBankAccountId(),
+                c.getBillingCycleDay());
     }
 
     // ── ClientPricingQuery (cross-module read API) ──

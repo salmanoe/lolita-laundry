@@ -70,7 +70,8 @@ groups AS (
 ),
 inserted AS (
     INSERT INTO monthly_billings
-        (billing_number, client_id, department_id, department_name, period_year, period_month, invoice_date, total, status)
+        (billing_number, client_id, department_id, department_name, period_year, period_month,
+         period_start, period_end, invoice_date, total, status)
     SELECT
         'BILL-' || g.client_code || '-' || to_char(make_date(g.yr, g.mo, 1), 'YYYYMM')
             || COALESCE(
@@ -78,7 +79,11 @@ inserted AS (
                          FROM regexp_split_to_table(d.name, '[^A-Za-z]+') AS parts(w)
                          WHERE w <> ''),
                  ''),
-        g.client_id, g.eff_dept, d.name, g.yr, g.mo, CURRENT_DATE, g.total, 'DRAFT'
+        g.client_id, g.eff_dept, d.name, g.yr, g.mo,
+        -- The dev seed only ever builds calendar-month periods.
+        make_date(g.yr, g.mo, 1),
+        (make_date(g.yr, g.mo, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date,
+        CURRENT_DATE, g.total, 'DRAFT'
     FROM groups g
     LEFT JOIN departments d ON d.id = g.eff_dept
     WHERE NOT EXISTS (

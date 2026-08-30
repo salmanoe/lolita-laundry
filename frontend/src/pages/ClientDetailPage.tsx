@@ -3,12 +3,14 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiFetch, ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
+import { useMe } from '../auth/useMe'
 import ClientFormModal from '../components/ClientFormModal'
 import DepartmentFormModal from '../components/DepartmentFormModal'
 import SetPriceModal from '../components/SetPriceModal'
-import { billingModeLabel } from '../lib/labels'
+import { billingModeLabel, isoDateLabel } from '../lib/labels'
 import { indexById, useLookupList } from '../lib/lookups'
 import { bankAccountLabel, useBankAccountOptions } from '../lib/bankAccounts'
+import { previousPeriodStart } from '../lib/billingCycle'
 import type { Client, Department, Item, PriceListEntry } from '../types/api'
 
 const rupiah = (n: number) =>
@@ -19,18 +21,45 @@ export default function ClientDetailPage() {
   const clientId = Number(id)
   const { getAccessTokenSilently } = useAuth()
   const qc = useQueryClient()
+  const isSuperAdmin = useMe().data?.role === 'SUPER_ADMIN'
 
   const [editClient, setEditClient] = useState(false)
   const [deptForm, setDeptForm] = useState<{ open: boolean; department?: Department }>({ open: false })
   const [priceForm, setPriceForm] = useState<{ open: boolean; presetItemId?: number; presetDepartmentId?: number; presetPrice?: number; presetEffectiveDate?: string }>({ open: false })
   const [copied, setCopied] = useState(false)
   const [priceSearch, setPriceSearch] = useState('')
+  // null = follow the client's billing cycle (see resyncFrom below); a string is the user's
+  // explicit override. Deliberately NOT seeded from the cycle at mount: the client is still
+  // loading then, so a seeded default would freeze at whatever the cycle was on first render and
+  // never follow a later change to it.
+  const [resyncFromOverride, setResyncFromOverride] = useState<string | null>(null)
 
   const token = async () => getAccessTokenSilently()
 
   const clientQ = useQuery({
     queryKey: ['client', clientId],
     queryFn: async () => apiFetch<Client>(`/api/clients/${clientId}`, { token: await token() }),
+  })
+
+  // The default re-sync window is the start of the client's PREVIOUS billing period, so it always
+  // lands on a period boundary. Anchoring it to the 1st of last month would start a cut-off
+  // client mid-period and leave that period's earlier orders un-re-homed.
+  const cycleDay = clientQ.data?.billingCycleDay ?? null
+  const defaultResyncFrom = previousPeriodStart(new Date(), cycleDay)
+  const resyncFrom = resyncFromOverride ?? defaultResyncFrom
+
+  // Re-runs the order → billing sync for this client's recent orders (SUPER_ADMIN).
+  const resync = useMutation({
+    mutationFn: async () =>
+      apiFetch<{ resyncedOrders: number }>(
+        `/api/billing/resync/${clientId}?from=${resyncFrom}`,
+        { method: 'POST', token: await token() },
+      ),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['billings'] })
+      alert(`Sinkronisasi selesai: ${r.resyncedOrders} order diproses ulang.`)
+    },
+    onError: (e) => alert(e instanceof ApiError ? e.detail : 'Gagal menyinkronkan tagihan.'),
   })
   const deptQ = useQuery({
     queryKey: ['departments', clientId],
@@ -125,8 +154,62 @@ export default function ClientDetailPage() {
             </span>
           }
         />
+        <Info
+          label="Siklus Penagihan"
+          value={
+            client.billingCycleDay == null
+              ? <span className="text-gray-400">Bulan kalender</span>
+              : `Tutup tgl ${client.billingCycleDay} (tgl ${client.billingCycleDay + 1} – tgl ${client.billingCycleDay})`
+          }
+        />
         <Info label="Token Order" value={<span className="font-mono text-xs">{client.orderToken}</span>} />
       </dl>
+
+      {/* Billing re-sync — SUPER_ADMIN. The order → billing sync is event-driven, so changing the
+          billing cycle above does not by itself move orders already sitting on a DRAFT tagihan.
+          This re-runs the sync for recent orders so they land in the right period. Issued/paid
+          tagihan are never touched. */}
+      {isSuperAdmin && (
+        <section className="rounded-lg border bg-white p-4 text-sm shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-gray-800">Sinkron Ulang Tagihan</h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Hitung ulang tagihan draf klien ini dari order sejak tanggal di bawah. Jalankan
+                setelah mengubah Siklus Penagihan. Tagihan yang sudah diterbitkan atau lunas tidak
+                berubah.
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Default: awal periode sebelumnya ({isoDateLabel(defaultResyncFrom)}) — selalu pas di
+                batas periode, agar tidak ada order yang tertinggal di tengah periode.
+                {resyncFromOverride && resyncFromOverride !== defaultResyncFrom && (
+                  <button
+                    onClick={() => setResyncFromOverride(null)}
+                    className="ml-1 font-medium text-brand-700 hover:underline"
+                  >
+                    Kembalikan ke default
+                  </button>
+                )}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={resyncFrom}
+                onChange={(e) => setResyncFromOverride(e.target.value || null)}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              <button
+                onClick={() => resync.mutate()}
+                disabled={resync.isPending}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {resync.isPending ? 'Menyinkronkan…' : 'Sinkron Ulang'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Departments */}
       <section>

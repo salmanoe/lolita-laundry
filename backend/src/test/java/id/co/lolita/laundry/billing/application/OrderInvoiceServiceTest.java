@@ -70,7 +70,7 @@ class OrderInvoiceServiceTest {
     void createForDeliveredOrder_buildsInvoice_rendersPdf_andStores() {
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.empty());
         when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
-        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null, null)));
         when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
@@ -100,7 +100,7 @@ class OrderInvoiceServiceTest {
         preview.attachPdf("invoices/INV-AYI-20260601-001.pdf");
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(preview));
         when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
-        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null, null)));
         when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
@@ -139,7 +139,7 @@ class OrderInvoiceServiceTest {
         preview.attachPdf("invoices/INV-AYI-20260601-001.pdf");
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.of(preview));
         when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(false)));
-        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null, null)));
         when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
@@ -155,7 +155,7 @@ class OrderInvoiceServiceTest {
     void prepareInvoiceForOrder_createsPreview_whenNoInvoiceYet() {
         when(invoiceRepository.findByOrderId(99L)).thenReturn(Optional.empty());
         when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(false)));
-        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null, null)));
         when(companyProfile.current()).thenReturn(COMPANY);
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any())).thenReturn("invoices/INV-AYI-20260601-001.pdf");
@@ -188,7 +188,7 @@ class OrderInvoiceServiceTest {
         invoice.attachPdf("invoices/INV-AYI-20260601-001.pdf");   // already has a PDF — still re-rendered
         when(invoiceRepository.findAll()).thenReturn(List.of(invoice));
         when(deliveredOrders.findBillableOrder(99L)).thenReturn(Optional.of(order(true)));
-        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null)));
+        when(clients.findById(1L)).thenReturn(Optional.of(new ClientInfo(1L, "Are You and I", "AYI", false, null, null)));
         when(pdf.renderOrderInvoice(any())).thenReturn(new byte[]{1, 2, 3});
         when(storage.store(eq("invoices/INV-AYI-20260601-001.pdf"), any()))
                 .thenReturn("invoices/INV-AYI-20260601-001.pdf");

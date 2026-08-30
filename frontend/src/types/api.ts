@@ -107,6 +107,11 @@ export interface Client {
   address:       string | null
   orderToken:    string
   bankAccountId: number | null  // → bank-accounts; null = the default account
+  /**
+   * Monthly billing cut-off day (1-28); null = plain calendar month. Cut-off 25 means the
+   * period runs from the 26th of the previous month through the 25th, labelled by its end month.
+   */
+  billingCycleDay: number | null
   active:        boolean
   createdAt:     string   // ISO-8601 instant string
 }
@@ -268,7 +273,9 @@ export interface MonthlyBilling {
   departmentId:   number | null
   departmentName: string | null   // denormalized for display (PER_DEPARTMENT clients)
   periodYear:     number
-  periodMonth:   number   // 1-12
+  periodMonth:   number   // 1-12 — the period's label (the month the cycle ENDS in)
+  periodStart:   string   // ISO date — first day the period covers
+  periodEnd:     string   // ISO date — last day the period covers
   invoiceDate:   string   // ISO date
   total:         number
   status:        BillingStatus

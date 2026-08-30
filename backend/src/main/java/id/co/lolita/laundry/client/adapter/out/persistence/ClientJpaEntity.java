@@ -50,6 +50,10 @@ class ClientJpaEntity {
     @Column(name = "bank_account_id")
     private Long bankAccountId;
 
+    /** Monthly billing cut-off day; null = plain calendar month. */
+    @Column(name = "billing_cycle_day")
+    private Integer billingCycleDay;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -68,6 +72,7 @@ class ClientJpaEntity {
         e.address = client.getAddress();
         e.orderToken = client.getOrderToken();
         e.bankAccountId = client.getBankAccountId();
+        e.billingCycleDay = client.getBillingCycleDay();
         e.active = client.isActive();
         e.createdAt = client.getCreatedAt();
         return e;
@@ -75,6 +80,6 @@ class ClientJpaEntity {
 
     Client toDomain() {
         return new Client(id, name, clientCode, clientTypeId, billingMode,
-                contactPerson, phone, address, orderToken, bankAccountId, active, createdAt);
+                contactPerson, phone, address, orderToken, bankAccountId, billingCycleDay, active, createdAt);
     }
 }

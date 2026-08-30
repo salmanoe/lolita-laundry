@@ -49,6 +49,17 @@ class MonthlyBillingJpaEntity {
     @Column(name = "period_month", nullable = false)
     private int periodMonth;
 
+    /**
+     * The calendar range the period covers, resolved from the client's billing cycle. A DRAFT
+     * re-resolves it on every sync; ISSUE freezes it. Stored rather than recomputed at render time
+     * so changing a client's cycle can never rewrite the period wording of a document already sent.
+     */
+    @Column(name = "period_start", nullable = false)
+    private LocalDate periodStart;
+
+    @Column(name = "period_end", nullable = false)
+    private LocalDate periodEnd;
+
     @Column(name = "invoice_date", nullable = false)
     private LocalDate invoiceDate;
 
@@ -103,6 +114,8 @@ class MonthlyBillingJpaEntity {
         e.departmentName = b.getDepartmentName();
         e.periodYear = b.getPeriodYear();
         e.periodMonth = b.getPeriodMonth();
+        e.periodStart = b.getPeriodStart();
+        e.periodEnd = b.getPeriodEnd();
         e.invoiceDate = b.getInvoiceDate();
         e.total = b.getTotal();
         e.status = b.getStatus();
@@ -119,13 +132,20 @@ class MonthlyBillingJpaEntity {
     }
 
     /**
-     * Copies the mutable fields (status, PDF, total, company snapshot) and reconciles the line
-     * set in place. The company snapshot is filled in when the billing is ISSUED.
+     * Copies the mutable fields (status, PDF, total, invoice date, company snapshot) and
+     * reconciles the line set in place. The company snapshot is filled in when the billing is
+     * ISSUED, and a cut-off-cycle billing is re-stamped with its real issue date at the same
+     * moment. The period identity and its frozen date range never change.
      */
     void applyMutable(MonthlyBilling b) {
         this.status = b.getStatus();
         this.pdfUrl = b.getPdfUrl();
         this.total = b.getTotal();
+        this.invoiceDate = b.getInvoiceDate();
+        // A DRAFT re-resolves its period range from the client's current billing cycle; ISSUE
+        // freezes it, and the domain rejects a reposition after that.
+        this.periodStart = b.getPeriodStart();
+        this.periodEnd = b.getPeriodEnd();
         copyCompanyFrom(b);
         syncLines(b);
     }
@@ -167,7 +187,8 @@ class MonthlyBillingJpaEntity {
         List<MonthlyBillingLine> domainLines = lines.stream()
                 .map(MonthlyBillingLineJpaEntity::toDomain).toList();
         var billing = new MonthlyBilling(id, billingNumber, clientId, departmentId, departmentName, periodYear,
-                periodMonth, invoiceDate, total, status, pdfUrl, notes, createdAt, domainLines);
+                periodMonth, periodStart, periodEnd, invoiceDate, total, status, pdfUrl, notes, createdAt,
+                domainLines);
         billing.captureCompany(companyName, companyAddress, companyPhone, bankBeneficiary, bankName, bankAccount,
                 bankHolder);
         return billing;
