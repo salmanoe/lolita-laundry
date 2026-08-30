@@ -29,6 +29,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Executor;
@@ -98,11 +99,11 @@ class MonthlyBillingServiceTest {
             new BankInfo("PT Lolita Laundry", "Bank Mandiri", "1230004567", "PT Lolita Laundry");
 
     private static ClientInfo combined() {
-        return new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false, null);
+        return new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false, null, null);
     }
 
     private static ClientInfo perDepartment() {
-        return new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, null);
+        return new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, null, null);
     }
 
     private static DeliveredOrder order(String number, Long deptId, String deptName, String total) {
@@ -124,7 +125,7 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_combinedClient_producesOneBilling() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of(
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth())).thenReturn(List.of(
                 order("AYI-20260601-001", null, null, "5000.00"),
                 order("AYI-20260602-001", null, null, "3000.00")));
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
@@ -144,7 +145,7 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_perDepartmentClient_splitsByDepartment() {
         when(clients.findById(PBS)).thenReturn(Optional.of(perDepartment()));
-        when(deliveredOrders.findBillableOrders(PBS, 2026, 6)).thenReturn(List.of(
+        when(deliveredOrders.findBillableOrders(PBS, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth())).thenReturn(List.of(
                 order("PBS-20260601-001", 10L, "Room Linen", "5000.00"),
                 order("PBS-20260602-001", 10L, "Room Linen", "5000.00"),
                 order("PBS-20260603-001", 20L, "F&B Linen", "3000.00")));
@@ -169,9 +170,10 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_replacesExistingDraft() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth()))
                 .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
         var existingDraft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
                 .thenReturn(Optional.of(existingDraft));
@@ -186,9 +188,10 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_rejectsRegenerationOfIssuedBilling() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth()))
                 .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
         var issued = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.ISSUED, null, null, Instant.now(), List.of());
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
                 .thenReturn(Optional.of(issued));
@@ -205,7 +208,7 @@ class MonthlyBillingServiceTest {
         // KI-4: the manual rebuild must be serialized with the async sync by running on the same
         // single-thread executor, not the request thread.
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6))
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth()))
                 .thenReturn(List.of(order("AYI-20260601-001", null, null, "5000.00")));
         when(billingRepository.findExisting(eq(COMBINED_CLIENT), eq(null), eq(2026), eq(6)))
                 .thenReturn(Optional.empty());
@@ -223,6 +226,7 @@ class MonthlyBillingServiceTest {
         // rather than silently drop the rolled-in order.
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
         var julyDraft = new MonthlyBilling(60L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                YearMonth.of(2026, 7).atDay(1), YearMonth.of(2026, 7).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
         when(billingRepository.findAll(COMBINED_CLIENT, 2026, 7)).thenReturn(List.of(julyDraft));
@@ -237,7 +241,7 @@ class MonthlyBillingServiceTest {
     @Test
     void generate_rejectsEmptyPeriod() {
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
-        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, 2026, 6)).thenReturn(List.of());
+        when(deliveredOrders.findBillableOrders(COMBINED_CLIENT, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth())).thenReturn(List.of());
 
         assertThatThrownBy(() -> service.generate(new GenerateCommand(COMBINED_CLIENT, 2026, 6)))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -256,6 +260,7 @@ class MonthlyBillingServiceTest {
     @Test
     void updateStatus_issuing_freezesCompanySnapshot_andRerenders() {
         var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
         when(billingRepository.findById(50L)).thenReturn(Optional.of(draft));
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
@@ -279,8 +284,9 @@ class MonthlyBillingServiceTest {
     void updateStatus_issuing_freezesTheClientsOwnBankAccount_notTheDefault() {
         // PBS bills to the company account. Issuing must freeze that account, not the default one.
         var draft = new MonthlyBilling(51L, "BILL-PBS-202606", PBS, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
-        var pbs = new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, COMPANY_ACCOUNT);
+        var pbs = new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, COMPANY_ACCOUNT, null);
         when(billingRepository.findById(51L)).thenReturn(Optional.of(draft));
         when(clients.findById(PBS)).thenReturn(Optional.of(pbs));
         when(companyProfile.current()).thenReturn(COMPANY);
@@ -302,9 +308,10 @@ class MonthlyBillingServiceTest {
     void draftRender_usesTheClientsCurrentBankAccount() {
         // A DRAFT follows the client's assignment live, so a reassignment shows up on the next render.
         var draft = new MonthlyBilling(52L, "BILL-PBS-202606", PBS, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, "billings/old.pdf", null,
                 Instant.now(), List.of());
-        var pbs = new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, COMPANY_ACCOUNT);
+        var pbs = new ClientInfo(PBS, "Pasar Baru Square", "PBS", true, COMPANY_ACCOUNT, null);
         when(billingRepository.findAll(null, null, null)).thenReturn(List.of(draft));
         when(clients.findById(PBS)).thenReturn(Optional.of(pbs));
         when(companyProfile.current()).thenReturn(COMPANY);
@@ -324,6 +331,7 @@ class MonthlyBillingServiceTest {
     @Test
     void draftRender_unassignedClientFallsBackToTheDefaultAccount() {
         var draft = new MonthlyBilling(53L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.DRAFT, "billings/old.pdf", null,
                 Instant.now(), List.of());
         when(billingRepository.findAll(null, null, null)).thenReturn(List.of(draft));
@@ -345,6 +353,7 @@ class MonthlyBillingServiceTest {
     void updateStatus_paying_doesNotRecaptureCompany() {
         // An ISSUED→PAID transition keeps the snapshot frozen at issue and does not re-render.
         var issued = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.ISSUED, "billings/k.pdf", null,
                 Instant.now(), List.of());
         when(billingRepository.findById(50L)).thenReturn(Optional.of(issued));
@@ -364,11 +373,12 @@ class MonthlyBillingServiceTest {
         // The client has since been reassigned to a different bank account: that must not leak in
         // either, or an invoice already paid would name an account it was never payable to.
         var paid = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("100.00"), BillingStatus.PAID, "billings/old.pdf", null,
                 Instant.now(), List.of());
         paid.captureCompany("Lolita Laundry", "OLD ADDRESS", "0000", "Old Beneficiary",
                 "Bank BCA", "9999999999", "Lolita Laundry");
-        var reassigned = new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false, COMPANY_ACCOUNT);
+        var reassigned = new ClientInfo(COMBINED_CLIENT, "Are You and I", "AYI", false, COMPANY_ACCOUNT, null);
         when(billingRepository.findAll(null, null, null)).thenReturn(List.of(paid));
         when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(reassigned));
         when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
@@ -391,6 +401,7 @@ class MonthlyBillingServiceTest {
         // KI-7: a monthly billing whose PDF never attached (storage outage during sync) heals on
         // first view; one already carrying a PDF is left untouched.
         var noPdf = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, null, null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
         when(billingRepository.findById(50L)).thenReturn(Optional.of(noPdf));
@@ -405,6 +416,7 @@ class MonthlyBillingServiceTest {
 
         // Already-rendered billing: no render, no save.
         var withPdf = new MonthlyBilling(51L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                YearMonth.of(2026, 7).atDay(1), YearMonth.of(2026, 7).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("1000.00"), BillingStatus.DRAFT, "billings/existing.pdf", null,
                 Instant.now(), List.of());
         when(billingRepository.findById(51L)).thenReturn(Optional.of(withPdf));
@@ -446,6 +458,7 @@ class MonthlyBillingServiceTest {
         var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("8000.00"), true, List.of(line));
         var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(edited));
@@ -482,9 +495,11 @@ class MonthlyBillingServiceTest {
         var edited = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("10000.00"), true, List.of(line));
         var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
         var issuedJuly = new MonthlyBilling(60L, "BILL-AYI-202607", COMBINED_CLIENT, null, null, 2026, 7,
+                YearMonth.of(2026, 7).atDay(1), YearMonth.of(2026, 7).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("3000.00"), BillingStatus.ISSUED, "billings/k2.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("3000.00"))));
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(edited));
@@ -519,6 +534,7 @@ class MonthlyBillingServiceTest {
         var unchanged = new DeliveredOrder(77L, "AYI-20260601-001", COMBINED_CLIENT,
                 LocalDate.of(2026, 6, 1), BigDecimal.ONE, new BigDecimal("5000.00"), true, List.of(line));
         var issuedJune = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.of(unchanged));
@@ -536,6 +552,7 @@ class MonthlyBillingServiceTest {
     void sync_removesCancelledOrderAndDeletesEmptyDraft() {
         when(deliveredOrders.findBillableOrder(77L)).thenReturn(Optional.empty());   // cancelled / gone
         var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
                 LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
                 List.of(MonthlyBillingLine.of(77L, "AYI-20260601-001", LocalDate.of(2026, 6, 1), new BigDecimal("5000.00"))));
         when(billingRepository.findAllByOrderLine(77L)).thenReturn(List.of(draft));
@@ -544,5 +561,250 @@ class MonthlyBillingServiceTest {
 
         verify(billingRepository).deleteById(50L);   // last line removed → billing deleted
         verify(billingRepository, never()).save(any());
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────────────────
+    // Custom billing cycle (a client billing on a cut-off day rather than the calendar month).
+    // The period keeps its YearMonth identity — labelled by the month it ENDS in — so numbering
+    // and roll-forward are unchanged; only the order-date → period mapping and the stored date
+    // range differ.
+    // ────────────────────────────────────────────────────────────────────────────────────────
+
+    private static final long CUTOFF_CLIENT = 9L;
+
+    /** A client whose invoice covers the 26th of one month through the 25th of the next. */
+    private static ClientInfo cutOff25() {
+        return new ClientInfo(CUTOFF_CLIENT, "Frances Hotel", "FRC", false, null, 25);
+    }
+
+    private static DeliveredOrder cutOffOrder(long id, LocalDate date, String total) {
+        var line = new DeliveredOrderGateway.InvoiceLine("Item", "Pcs", BigDecimal.ONE,
+                new BigDecimal(total), new BigDecimal(total), null, null);
+        return new DeliveredOrder(id, "FRC-" + date.toString().replace("-", "") + "-001", CUTOFF_CLIENT,
+                date, BigDecimal.ONE, new BigDecimal(total), true, List.of(line));
+    }
+
+    @Test
+    void sync_cutOffClient_orderOnTheCutoffDayBillsToThatPeriod() {
+        // 25 Aug is the last day of the "Agustus" period (26 Jul – 25 Aug).
+        when(deliveredOrders.findBillableOrder(80L))
+                .thenReturn(Optional.of(cutOffOrder(80L, LocalDate.of(2026, 8, 25), "5000.00")));
+        when(billingRepository.findAllByOrderLine(80L)).thenReturn(List.of());
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        when(billingRepository.findExisting(CUTOFF_CLIENT, null, 2026, 8)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(80L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-FRC-202608");
+        assertThat(saved.getPeriodYear()).isEqualTo(2026);
+        assertThat(saved.getPeriodMonth()).isEqualTo(8);
+        assertThat(saved.getPeriodStart()).isEqualTo(LocalDate.of(2026, 7, 26));
+        assertThat(saved.getPeriodEnd()).isEqualTo(LocalDate.of(2026, 8, 25));
+    }
+
+    @Test
+    void sync_cutOffClient_orderAfterTheCutoffBillsToTheNextPeriod() {
+        // 26 Aug is the first day of the "September" period (26 Aug – 25 Sep) — under the plain
+        // calendar month it would have landed on the August bill.
+        when(deliveredOrders.findBillableOrder(81L))
+                .thenReturn(Optional.of(cutOffOrder(81L, LocalDate.of(2026, 8, 26), "5000.00")));
+        when(billingRepository.findAllByOrderLine(81L)).thenReturn(List.of());
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        when(billingRepository.findExisting(CUTOFF_CLIENT, null, 2026, 9)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(81L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-FRC-202609");
+        assertThat(saved.getPeriodStart()).isEqualTo(LocalDate.of(2026, 8, 26));
+        assertThat(saved.getPeriodEnd()).isEqualTo(LocalDate.of(2026, 9, 25));
+    }
+
+    @Test
+    void sync_cutOffClient_editOnIssuedBill_rollsDeltaIntoTheNextCyclesDraft() {
+        // KI-3 still holds on a cut-off cycle: the frozen Agustus bill (26 Jul – 25 Aug) keeps its
+        // line and the +3000 delta rolls into the next open period, September.
+        var edited = cutOffOrder(80L, LocalDate.of(2026, 8, 10), "8000.00");
+        var issuedAug = new MonthlyBilling(50L, "BILL-FRC-202608", CUTOFF_CLIENT, null, null, 2026, 8,
+                LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25),
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.ISSUED, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(80L, edited.orderNumber(), LocalDate.of(2026, 8, 10),
+                        new BigDecimal("5000.00"))));
+        when(deliveredOrders.findBillableOrder(80L)).thenReturn(Optional.of(edited));
+        when(billingRepository.findAllByOrderLine(80L)).thenReturn(List.of(issuedAug));
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        when(billingRepository.findExisting(CUTOFF_CLIENT, null, 2026, 8)).thenReturn(Optional.of(issuedAug));
+        when(billingRepository.findExisting(CUTOFF_CLIENT, null, 2026, 9)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        service.sync(80L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getBillingNumber()).isEqualTo("BILL-FRC-202609");
+        assertThat(saved.getTotal()).isEqualByComparingTo("3000.00");
+        assertThat(saved.getPeriodStart()).isEqualTo(LocalDate.of(2026, 8, 26));
+    }
+
+    @Test
+    void generate_cutOffClient_aggregatesTheCycleRangeNotTheCalendarMonth() {
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        when(deliveredOrders.findBillableOrders(CUTOFF_CLIENT, LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25)))
+                .thenReturn(List.of(cutOffOrder(80L, LocalDate.of(2026, 7, 28), "5000.00"),
+                        cutOffOrder(81L, LocalDate.of(2026, 8, 20), "3000.00")));
+        when(billingRepository.findExisting(CUTOFF_CLIENT, null, 2026, 8)).thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        var result = service.generate(new GenerateCommand(CUTOFF_CLIENT, 2026, 8));
+
+        assertThat(result).singleElement().satisfies(b -> {
+            assertThat(b.getBillingNumber()).isEqualTo("BILL-FRC-202608");
+            assertThat(b.getTotal()).isEqualByComparingTo("8000.00");
+            assertThat(b.getPeriodStart()).isEqualTo(LocalDate.of(2026, 7, 26));
+            assertThat(b.getPeriodEnd()).isEqualTo(LocalDate.of(2026, 8, 25));
+        });
+    }
+
+    @Test
+    void generate_cutOffClient_ki8GuardUsesTheCycleRange() {
+        // KI-8: an order dated 30 Aug sits inside the *calendar* month but outside this client's
+        // Agustus cycle (26 Jul – 25 Aug), so it can only be there by roll-forward. Refuse rather
+        // than rebuild membership by date and silently drop it.
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        var draft = new MonthlyBilling(50L, "BILL-FRC-202608", CUTOFF_CLIENT, null, null, 2026, 8,
+                LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25),
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, null, null, Instant.now(),
+                List.of(MonthlyBillingLine.of(80L, "FRC-20260830-001", LocalDate.of(2026, 8, 30),
+                        new BigDecimal("5000.00"))));
+        when(billingRepository.findAll(CUTOFF_CLIENT, 2026, 8)).thenReturn(List.of(draft));
+
+        assertThatThrownBy(() -> service.generate(new GenerateCommand(CUTOFF_CLIENT, 2026, 8)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("digulirkan");
+        verify(billingRepository, never()).save(any());
+    }
+
+    @Test
+    void generate_cutOffClient_ki8GuardAcceptsAnOrderFromThePreviousCalendarMonth() {
+        // The mirror case: 28 Jul is outside the calendar month but squarely inside this client's
+        // Agustus cycle, so it must NOT be mistaken for a rolled-forward order.
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        var draft = new MonthlyBilling(50L, "BILL-FRC-202608", CUTOFF_CLIENT, null, null, 2026, 8,
+                LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25),
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, null, null, Instant.now(),
+                List.of(MonthlyBillingLine.of(80L, "FRC-20260728-001", LocalDate.of(2026, 7, 28),
+                        new BigDecimal("5000.00"))));
+        when(billingRepository.findAll(CUTOFF_CLIENT, 2026, 8)).thenReturn(List.of(draft));
+        when(deliveredOrders.findBillableOrders(CUTOFF_CLIENT, LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25)))
+                .thenReturn(List.of(cutOffOrder(80L, LocalDate.of(2026, 7, 28), "5000.00")));
+        when(billingRepository.findExisting(CUTOFF_CLIENT, null, 2026, 8)).thenReturn(Optional.of(draft));
+        stubPdfAndStorageAndSave();
+
+        var result = service.generate(new GenerateCommand(CUTOFF_CLIENT, 2026, 8));
+
+        assertThat(result).singleElement()
+                .satisfies(b -> assertThat(b.getTotal()).isEqualByComparingTo("5000.00"));
+        verify(billingRepository).deleteById(50L);
+    }
+
+    @Test
+    void sync_realignsAnOpenDraftCreatedUnderThePreviousCycle() {
+        // The client has just been switched to a cut-off of 25. Its Agustus DRAFT was created under
+        // the calendar rule and still claims 1 - 31 Aug. A DRAFT follows the client's current cycle
+        // (only ISSUE freezes it), so the next sync realigns it to 26 Jul - 25 Aug.
+        var edited = cutOffOrder(80L, LocalDate.of(2026, 8, 10), "8000.00");
+        var staleDraft = new MonthlyBilling(50L, "BILL-FRC-202608", CUTOFF_CLIENT, null, null, 2026, 8,
+                LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31),
+                LocalDate.now(), new BigDecimal("5000.00"), BillingStatus.DRAFT, "billings/k.pdf", null, Instant.now(),
+                List.of(MonthlyBillingLine.of(80L, edited.orderNumber(), LocalDate.of(2026, 8, 10),
+                        new BigDecimal("5000.00"))));
+        when(deliveredOrders.findBillableOrder(80L)).thenReturn(Optional.of(edited));
+        when(billingRepository.findAllByOrderLine(80L)).thenReturn(List.of(staleDraft));
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        stubPdfAndStorageAndSave();
+
+        service.sync(80L);
+
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository).save(captor.capture());
+        var saved = captor.getValue();
+        assertThat(saved.getPeriodStart()).isEqualTo(LocalDate.of(2026, 7, 26));
+        assertThat(saved.getPeriodEnd()).isEqualTo(LocalDate.of(2026, 8, 25));
+        assertThat(saved.getTotal()).isEqualByComparingTo("8000.00");
+    }
+
+    @Test
+    void updateStatus_issuing_reStampsInvoiceDateForACutOffClient() {
+        // A DRAFT is stamped the day its first order arrived — on a 26th → 25th cycle that is
+        // ~a month before the invoice goes out, so the issue date is re-stamped.
+        var draft = new MonthlyBilling(50L, "BILL-FRC-202608", CUTOFF_CLIENT, null, null, 2026, 8,
+                LocalDate.of(2026, 7, 26), LocalDate.of(2026, 8, 25),
+                LocalDate.of(2026, 7, 26), new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(),
+                List.of());
+        when(billingRepository.findById(50L)).thenReturn(Optional.of(draft));
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(null)).thenReturn(DEFAULT_BANK);
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(any(), any())).thenReturn("billings/BILL-FRC-202608.pdf");
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.updateStatus(new UpdateStatusCommand(50L, BillingStatus.ISSUED));
+
+        assertThat(result.getInvoiceDate()).isEqualTo(LocalDate.now());
+    }
+
+    @Test
+    void updateStatus_issuing_keepsTheDraftInvoiceDateForACalendarClient() {
+        var stampedAtDraft = LocalDate.of(2026, 6, 1);
+        var draft = new MonthlyBilling(50L, "BILL-AYI-202606", COMBINED_CLIENT, null, null, 2026, 6,
+                YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(),
+                stampedAtDraft, new BigDecimal("100.00"), BillingStatus.DRAFT, null, null, Instant.now(), List.of());
+        when(billingRepository.findById(50L)).thenReturn(Optional.of(draft));
+        when(clients.findById(COMBINED_CLIENT)).thenReturn(Optional.of(combined()));
+        when(companyProfile.current()).thenReturn(COMPANY);
+        when(companyProfile.bankAccount(null)).thenReturn(DEFAULT_BANK);
+        when(pdf.renderMonthlyBilling(any())).thenReturn(new byte[]{1, 2, 3});
+        when(storage.store(any(), any())).thenReturn("billings/BILL-AYI-202606.pdf");
+        when(billingRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.updateStatus(new UpdateStatusCommand(50L, BillingStatus.ISSUED));
+
+        assertThat(result.getInvoiceDate()).isEqualTo(stampedAtDraft);
+    }
+
+    @Test
+    void resyncClient_reRunsSyncForEveryBillableOrderSince() {
+        var from = LocalDate.of(2026, 8, 1);
+        when(clients.findById(CUTOFF_CLIENT)).thenReturn(Optional.of(cutOff25()));
+        when(deliveredOrders.findBillableOrders(eq(CUTOFF_CLIENT), eq(from), any()))
+                .thenReturn(List.of(cutOffOrder(80L, LocalDate.of(2026, 8, 20), "5000.00"),
+                        cutOffOrder(81L, LocalDate.of(2026, 8, 27), "3000.00")));
+        // each order is then re-synced individually
+        when(deliveredOrders.findBillableOrder(80L))
+                .thenReturn(Optional.of(cutOffOrder(80L, LocalDate.of(2026, 8, 20), "5000.00")));
+        when(deliveredOrders.findBillableOrder(81L))
+                .thenReturn(Optional.of(cutOffOrder(81L, LocalDate.of(2026, 8, 27), "3000.00")));
+        when(billingRepository.findAllByOrderLine(any())).thenReturn(List.of());
+        when(billingRepository.findExisting(eq(CUTOFF_CLIENT), eq(null), eq(2026), any(Integer.class)))
+                .thenReturn(Optional.empty());
+        stubPdfAndStorageAndSave();
+
+        int resynced = service.resyncClient(CUTOFF_CLIENT, from);
+
+        assertThat(resynced).isEqualTo(2);
+        var captor = ArgumentCaptor.forClass(MonthlyBilling.class);
+        verify(billingRepository, org.mockito.Mockito.times(2)).save(captor.capture());
+        // the 20 Aug order lands on Agustus, the 27 Aug one on September — the cycle split
+        assertThat(captor.getAllValues()).extracting(MonthlyBilling::getBillingNumber)
+                .containsExactly("BILL-FRC-202608", "BILL-FRC-202609");
     }
 }

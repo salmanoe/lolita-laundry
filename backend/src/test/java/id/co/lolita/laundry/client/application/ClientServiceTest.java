@@ -64,14 +64,14 @@ class ClientServiceTest {
 
     private Client activeClient(long id) {
         return new Client(id, "X", "X", TYPE_ID, BillingMode.COMBINED,
-                null, null, null, UUID.randomUUID(), null, true, null);
+                null, null, null, UUID.randomUUID(), null, null, true, null);
     }
 
     @Test
     void createClient_rejectsDuplicateCode() {
         when(clientRepository.existsByClientCode("PBS")).thenReturn(true);
         var cmd = new CreateClientCommand("Pasar Baru", "PBS", TYPE_ID,
-                BillingMode.PER_DEPARTMENT, null, null, null, null);
+                BillingMode.PER_DEPARTMENT, null, null, null, null, null);
 
         assertThatThrownBy(() -> service.createClient(cmd))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -86,7 +86,7 @@ class ClientServiceTest {
                 .thenReturn(Optional.of(new ClientType(TYPE_ID, "HOTEL", "Hotel", 1, true)));
         when(clientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         var cmd = new CreateClientCommand("Are You and I", "AYI", TYPE_ID,
-                BillingMode.COMBINED, "Reception", "022", "addr", null);
+                BillingMode.COMBINED, "Reception", "022", "addr", null, null);
 
         var result = service.createClient(cmd);
 
@@ -104,7 +104,7 @@ class ClientServiceTest {
                 .thenReturn(Optional.of(new ClientType(TYPE_ID, "HOTEL", "Hotel", 1, true)));
         when(bankAccounts.findById(BANK_ACCOUNT_ID)).thenReturn(Optional.empty());
         var cmd = new CreateClientCommand("Pasar Baru", "PBS", TYPE_ID,
-                BillingMode.PER_DEPARTMENT, null, null, null, BANK_ACCOUNT_ID);
+                BillingMode.PER_DEPARTMENT, null, null, null, BANK_ACCOUNT_ID, null);
 
         assertThatThrownBy(() -> service.createClient(cmd))
                 .isInstanceOf(NotFoundException.class);
@@ -119,7 +119,7 @@ class ClientServiceTest {
         when(bankAccounts.findById(BANK_ACCOUNT_ID))
                 .thenReturn(Optional.of(new BankAccountRef(BANK_ACCOUNT_ID, "Rekening Lama", false)));
         var cmd = new CreateClientCommand("Pasar Baru", "PBS", TYPE_ID,
-                BillingMode.PER_DEPARTMENT, null, null, null, BANK_ACCOUNT_ID);
+                BillingMode.PER_DEPARTMENT, null, null, null, BANK_ACCOUNT_ID, null);
 
         assertThatThrownBy(() -> service.createClient(cmd))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -136,7 +136,7 @@ class ClientServiceTest {
                 .thenReturn(Optional.of(new BankAccountRef(BANK_ACCOUNT_ID, "Rekening Perusahaan", true)));
         when(clientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         var cmd = new CreateClientCommand("Pasar Baru", "PBS", TYPE_ID,
-                BillingMode.PER_DEPARTMENT, null, null, null, BANK_ACCOUNT_ID);
+                BillingMode.PER_DEPARTMENT, null, null, null, BANK_ACCOUNT_ID, null);
 
         assertThat(service.createClient(cmd).getBankAccountId()).isEqualTo(BANK_ACCOUNT_ID);
     }

@@ -1,5 +1,7 @@
 package id.co.lolita.laundry.billing.domain.port.out;
 
+import id.co.lolita.laundry.billing.domain.BillingCycle;
+
 import java.util.Optional;
 
 /**
@@ -10,10 +12,18 @@ import java.util.Optional;
 public interface BillingClientGateway {
 
     /**
-     * @param bankAccountId which company bank account this client's invoices are payable to;
-     *                      null means the default account
+     * @param bankAccountId   which company bank account this client's invoices are payable to;
+     *                        null means the default account
+     * @param billingCycleDay the client's monthly billing cut-off day; null means the plain
+     *                        calendar month
      */
-    record ClientInfo(Long id, String name, String clientCode, boolean perDepartment, Long bankAccountId) {
+    record ClientInfo(Long id, String name, String clientCode, boolean perDepartment, Long bankAccountId,
+                      Integer billingCycleDay) {
+
+        /** The client's billing cycle — {@link BillingCycle#CALENDAR} unless a cut-off is set. */
+        public BillingCycle cycle() {
+            return BillingCycle.of(billingCycleDay);
+        }
     }
 
     Optional<ClientInfo> findById(Long clientId);

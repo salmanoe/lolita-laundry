@@ -22,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
@@ -402,10 +401,8 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     }
 
     @Override
-    public List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, int year, int month) {
-        YearMonth ym = YearMonth.of(year, month);
-        return orderRepository.findDeliveredByClientAndPeriod(
-                        clientId, ym.atDay(1), ym.atEndOfMonth()).stream()
+    public List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, LocalDate from, LocalDate to) {
+        return orderRepository.findDeliveredByClientAndPeriod(clientId, from, to).stream()
                 .map(this::toDeliveredDetail)
                 .toList();
     }
@@ -418,10 +415,8 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
     }
 
     @Override
-    public List<DeliveredOrderDetail> findBillableOrders(Long clientId, int year, int month) {
-        YearMonth ym = YearMonth.of(year, month);
-        return orderRepository.findBillableByClientAndPeriod(
-                        clientId, ym.atDay(1), ym.atEndOfMonth()).stream()
+    public List<DeliveredOrderDetail> findBillableOrders(Long clientId, LocalDate from, LocalDate to) {
+        return orderRepository.findBillableByClientAndPeriod(clientId, from, to).stream()
                 .map(this::toDeliveredDetail)
                 .toList();
     }

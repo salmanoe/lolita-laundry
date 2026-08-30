@@ -14,6 +14,11 @@ import java.util.UUID;
  * <p>{@code bankAccountId} picks which company bank account the client's monthly billing invoices
  * are payable to. Null — the normal case — means the default account; only clients that bill
  * somewhere else (PBS, to the company account) carry an explicit value.
+ *
+ * <p>{@code billingCycleDay} is the client's monthly billing cut-off. Null — the normal case —
+ * means the plain calendar month (1st through the last day). A client with a contractual cut-off
+ * (e.g. "invoice every 25th") carries that day, and its billing period then runs from the day
+ * after the cut-off in the previous month through the cut-off itself.
  */
 @Getter
 public class Client {
@@ -28,13 +33,14 @@ public class Client {
     private String address;
     private UUID orderToken;
     private Long bankAccountId;       // FK → bank_accounts; null = bill to the default account
+    private Integer billingCycleDay;  // monthly cut-off day; null = plain calendar month
     private boolean active;
     private final Instant createdAt;
 
     public Client(
             Long id, String name, String clientCode, Long clientTypeId, BillingMode billingMode,
             String contactPerson, String phone, String address, UUID orderToken, Long bankAccountId,
-            boolean active, Instant createdAt
+            Integer billingCycleDay, boolean active, Instant createdAt
     ) {
         this.id = id;
         this.name = name;
@@ -46,12 +52,14 @@ public class Client {
         this.address = address;
         this.orderToken = orderToken;
         this.bankAccountId = bankAccountId;
+        this.billingCycleDay = billingCycleDay;
         this.active = active;
         this.createdAt = createdAt;
     }
 
     public void update(String name, Long clientTypeId, BillingMode billingMode,
-                       String contactPerson, String phone, String address, Long bankAccountId) {
+                       String contactPerson, String phone, String address, Long bankAccountId,
+                       Integer billingCycleDay) {
         this.name = name;
         this.clientTypeId = clientTypeId;
         this.billingMode = billingMode;
@@ -59,6 +67,7 @@ public class Client {
         this.phone = phone;
         this.address = address;
         this.bankAccountId = bankAccountId;
+        this.billingCycleDay = billingCycleDay;
     }
 
     /**

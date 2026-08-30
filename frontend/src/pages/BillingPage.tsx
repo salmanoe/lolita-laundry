@@ -5,7 +5,7 @@ import { ApiError, apiFetch } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import Modal from '../components/Modal'
-import { billingStatusBadge, billingStatusLabel, monthName } from '../lib/labels'
+import { billingStatusBadge, billingStatusLabel, monthName, periodRangeLabel } from '../lib/labels'
 import type { Client, MonthlyBilling, Page } from '../types/api'
 
 const rupiah = (n: number) =>
@@ -164,7 +164,10 @@ export default function BillingPage() {
                         {b.departmentName && <p className="text-xs text-gray-400">{b.departmentName}</p>}
                       </td>
                       <td className="px-4 py-3 text-gray-700">{clientsById.get(b.clientId)?.name ?? `#${b.clientId}`}</td>
-                      <td className="px-4 py-3 text-gray-500">{monthName[b.periodMonth]} {b.periodYear}</td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {monthName[b.periodMonth]} {b.periodYear}
+                        <PeriodRange billing={b} />
+                      </td>
                       <td className="px-4 py-3 font-medium text-gray-700">{rupiah(b.total)}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${billingStatusBadge[b.status]}`}>
@@ -187,7 +190,10 @@ export default function BillingPage() {
                         {group.length} departemen
                       </td>
                       <td className="px-4 py-3 text-gray-700">{clientsById.get(first.clientId)?.name ?? `#${first.clientId}`}</td>
-                      <td className="px-4 py-3 text-gray-500">{monthName[first.periodMonth]} {first.periodYear}</td>
+                      <td className="px-4 py-3 text-gray-500">
+                        {monthName[first.periodMonth]} {first.periodYear}
+                        <PeriodRange billing={first} />
+                      </td>
                       <td className="px-4 py-3 font-medium text-gray-700">{rupiah(total)}</td>
                       <td className="px-4 py-3 text-xs text-gray-400">{open ? 'Tutup' : 'Lihat per departemen'}</td>
                     </tr>
@@ -231,6 +237,16 @@ export default function BillingPage() {
       />
     </div>
   )
+}
+
+/**
+ * The billed date range, shown under the period label only when it is not a plain calendar month
+ * — i.e. the client bills on a cut-off cycle (26 Jul – 25 Agu rather than 1 – 31 Agu).
+ */
+function PeriodRange({ billing }: { billing: MonthlyBilling }) {
+  const range = periodRangeLabel(billing.periodStart, billing.periodEnd)
+  if (!range) return null
+  return <p className="text-xs text-gray-400">{range}</p>
 }
 
 function GenerateBillingModal({

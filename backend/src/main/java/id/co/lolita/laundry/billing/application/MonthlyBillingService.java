@@ -1,5 +1,6 @@
 package id.co.lolita.laundry.billing.application;
 
+import id.co.lolita.laundry.billing.domain.BillingCycle;
 import id.co.lolita.laundry.billing.domain.BillingStatus;
 import id.co.lolita.laundry.billing.domain.MonthlyBilling;
 import id.co.lolita.laundry.billing.domain.MonthlyBillingLine;
@@ -84,17 +85,23 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var client = clients.findById(command.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + command.clientId()));
 
-        // KI-8 guard: a period's DRAFT may hold orders rolled forward from a frozen natural month
-        // (their order_date is in a different period). A manual rebuild keys membership purely by
-        // order_date, so it cannot reproduce those rolled-in orders — replacing the DRAFT would
-        // silently drop them (lost revenue). Such a period is fully auto-maintained; refuse rather
-        // than corrupt it.
+        // The period's calendar range, resolved from the client's billing cycle — a plain calendar
+        // month unless the client bills on a cut-off (e.g. 26th → 25th).
+        var cycle = client.cycle();
+        var period = YearMonth.of(command.year(), command.month());
+        var periodStart = cycle.startOf(period);
+        var periodEnd = cycle.endOf(period);
+
+        // KI-8 guard: a period's DRAFT may hold orders rolled forward from a frozen natural period
+        // (their order_date falls outside this period's range). A manual rebuild keys membership
+        // purely by order_date, so it cannot reproduce those rolled-in orders — replacing the DRAFT
+        // would silently drop them (lost revenue). Such a period is fully auto-maintained; refuse
+        // rather than corrupt it.
         boolean hasRolledForward = billingRepository.findAll(command.clientId(), command.year(), command.month())
                 .stream()
                 .filter(b -> b.getStatus() == BillingStatus.DRAFT)
                 .flatMap(b -> b.getLines().stream())
-                .anyMatch(l -> l.orderDate().getYear() != command.year()
-                        || l.orderDate().getMonthValue() != command.month());
+                .anyMatch(l -> l.orderDate().isBefore(periodStart) || l.orderDate().isAfter(periodEnd));
         if (hasRolledForward) {
             throw new IllegalArgumentException(
                     ("Tagihan %s untuk %s memuat order yang digulirkan dari periode lain dan dikelola otomatis — "
@@ -102,7 +109,7 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
                             .formatted(BillingFormats.periodLabel(command.year(), command.month()), client.name()));
         }
 
-        var billable = deliveredOrders.findBillableOrders(command.clientId(), command.year(), command.month());
+        var billable = deliveredOrders.findBillableOrders(command.clientId(), periodStart, periodEnd);
         if (billable.isEmpty()) {
             throw new IllegalArgumentException("Tidak ada order untuk %s pada periode %s"
                     .formatted(client.name(), BillingFormats.periodLabel(command.year(), command.month())));
@@ -123,13 +130,13 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
             }
             for (var entry : linesByDept.entrySet()) {
                 results.add(buildAndSave(client, entry.getKey(), deptNames.get(entry.getKey()),
-                        command.year(), command.month(), entry.getValue()));
+                        period, periodStart, periodEnd, entry.getValue()));
             }
         } else {
             var lines = billable.stream()
                     .map(o -> MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), o.total()))
                     .toList();
-            results.add(buildAndSave(client, null, null, command.year(), command.month(), lines));
+            results.add(buildAndSave(client, null, null, period, periodStart, periodEnd, lines));
         }
         return results;
     }
@@ -150,6 +157,13 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
             var bank = companyProfile.bankAccount(client.bankAccountId());
             billing.captureCompany(c.companyName(), c.address(), c.phone(), bank.beneficiary(),
                     bank.bankName(), bank.accountNumber(), bank.accountHolder());
+            // A DRAFT is stamped with the day its first order arrived. For a client on a cut-off
+            // cycle that date lands ~a month before the invoice actually goes out and is
+            // contractually meaningful, so re-stamp it with the real issue date. Calendar clients
+            // keep the existing behaviour.
+            if (client.billingCycleDay() != null) {
+                billing.stampInvoiceDate(LocalDate.now());
+            }
             var pdfBytes = pdf.renderMonthlyBilling(toDocument(billing, client));
             billing.attachPdf(storage.store("billings/" + billing.getBillingNumber() + ".pdf", pdfBytes));
         }
@@ -222,7 +236,8 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
         var client = clients.findById(o.clientId())
                 .orElseThrow(() -> new NotFoundException("Client not found: " + o.clientId()));
         var portions = portionsOf(o, client.perDepartment());
-        var naturalYm = YearMonth.of(o.orderDate().getYear(), o.orderDate().getMonthValue());
+        var cycle = client.cycle();
+        var naturalYm = cycle.periodOf(o.orderDate());
 
         // Reconcile every department the order currently touches *plus* every department it is
         // already billed on — so a department an edit emptied out of the order is reconciled too
@@ -283,11 +298,12 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
                         .map(b -> lineSubtotal(b, orderId))
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
                 var delta = desired.subtract(frozenBilled);
-                reconcileAdjustment(client, deptId, deptName, o, existing, naturalYm, delta);
+                reconcileAdjustment(client, cycle, deptId, deptName, o, existing, naturalYm, delta);
             } else if (naturalBill.isPresent()) {
                 // Natural-period DRAFT → upsert the full current amount, or drop the line if an edit
                 // moved all of this department's items out of the order.
                 var b = naturalBill.get();
+                b.repositionPeriod(cycle.startOf(naturalYm), cycle.endOf(naturalYm));
                 if (desired.signum() == 0) {
                     dropOrderFrom(b, orderId);
                 } else {
@@ -298,12 +314,35 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
             } else if (desired.signum() != 0) {
                 // Not yet billed on this department → resolve the open DRAFT (rolling forward if the
                 // natural month is already closed) and upsert the full amount.
-                var target = resolveTargetDraft(client, deptId, deptName, o.orderDate());
+                var target = resolveTargetDraft(client, cycle, deptId, deptName, o.orderDate());
                 target.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), desired));
                 renderAndAttach(target);
                 billingRepository.save(target);
             }
         }
+    }
+
+    /**
+     * Re-runs {@link #sync} for the client's billable orders from {@code from} onward. Dispatched
+     * onto the single-thread billing executor and awaited, so it is serialized with the async
+     * order→billing sync exactly like the manual rebuild (KI-4).
+     */
+    @Override
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public int resyncClient(Long clientId, LocalDate from) {
+        return runOnBillingThread(() -> self.getObject().resyncClientInternal(clientId, from));
+    }
+
+    @Transactional
+    public int resyncClientInternal(Long clientId, LocalDate from) {
+        clients.findById(clientId)
+                .orElseThrow(() -> new NotFoundException("Client not found: " + clientId));
+        var orders = deliveredOrders.findBillableOrders(clientId, from, LocalDate.now());
+        for (var order : orders) {
+            sync(order.orderId());
+        }
+        log.info("Re-synced {} orders for client {} from {}", orders.size(), clientId, from);
+        return orders.size();
     }
 
     // ── helpers ──
@@ -342,8 +381,9 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
      * is upserted as a single line keyed by the order, so repeated edits always reflect the
      * cumulative difference from the frozen amount rather than double-counting.
      */
-    private void reconcileAdjustment(ClientInfo client, Long deptId, String deptName, DeliveredOrder o,
-                                     List<MonthlyBilling> existing, YearMonth naturalYm, BigDecimal delta) {
+    private void reconcileAdjustment(ClientInfo client, BillingCycle cycle, Long deptId, String deptName,
+                                     DeliveredOrder o, List<MonthlyBilling> existing, YearMonth naturalYm,
+                                     BigDecimal delta) {
         if (delta.signum() == 0) {
             existing.stream()
                     .filter(b -> Objects.equals(b.getDepartmentId(), deptId))
@@ -354,7 +394,7 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
                     .ifPresent(b -> dropOrderFrom(b, o.orderId()));
             return;
         }
-        var target = resolveTargetDraft(client, deptId, deptName, o.orderDate());
+        var target = resolveTargetDraft(client, cycle, deptId, deptName, o.orderDate());
         target.upsertLine(MonthlyBillingLine.of(o.orderId(), o.orderNumber(), o.orderDate(), delta));
         renderAndAttach(target);
         billingRepository.save(target);
@@ -410,23 +450,31 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     }
 
     /**
-     * The open DRAFT billing for the (client, department, period). Rolls forward one month at a
-     * time while the natural period is already ISSUED/PAID (a closed month), and starts a fresh
+     * The open DRAFT billing for the (client, department, period). Rolls forward one period at a
+     * time while the natural period is already ISSUED/PAID (a closed period), and starts a fresh
      * empty DRAFT if none exists yet.
+     *
+     * <p>A period keeps its {@link YearMonth} identity even on a cut-off cycle (it is labelled by
+     * the month it ends in), so "the next period" is still {@code plusMonths(1)} — only the
+     * order-date → period mapping and the stored date range come from the cycle.
      */
-    private MonthlyBilling resolveTargetDraft(ClientInfo client, Long departmentId, String departmentName,
-                                              LocalDate orderDate) {
-        var ym = YearMonth.of(orderDate.getYear(), orderDate.getMonthValue());
-        for (int i = 0; i < 60; i++) {   // bounded; the current month is always open
+    private MonthlyBilling resolveTargetDraft(ClientInfo client, BillingCycle cycle, Long departmentId,
+                                              String departmentName, LocalDate orderDate) {
+        var ym = cycle.periodOf(orderDate);
+        for (int i = 0; i < 60; i++) {   // bounded; the current period is always open
             var existing = billingRepository.findExisting(client.id(), departmentId, ym.getYear(), ym.getMonthValue());
             if (existing.isEmpty()) {
                 var number = buildBillingNumber(client.clientCode(), ym.getYear(), ym.getMonthValue(),
                         departmentId, departmentName);
                 return MonthlyBilling.startNew(number, client.id(), departmentId, departmentName,
-                        ym.getYear(), ym.getMonthValue(), LocalDate.now());
+                        ym.getYear(), ym.getMonthValue(), cycle.startOf(ym), cycle.endOf(ym), LocalDate.now());
             }
             if (existing.get().getStatus() == BillingStatus.DRAFT) {
-                return existing.get();
+                // A DRAFT follows the client's current cycle (ISSUE freezes it), so a draft created
+                // before a cut-off change is realigned here rather than left claiming the old range.
+                var draft = existing.get();
+                draft.repositionPeriod(cycle.startOf(ym), cycle.endOf(ym));
+                return draft;
             }
             ym = ym.plusMonths(1);   // closed (ISSUED/PAID) — roll into the next period
         }
@@ -445,7 +493,10 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
     }
 
     private MonthlyBilling buildAndSave(ClientInfo client, Long departmentId, String departmentName,
-                                        int year, int month, List<MonthlyBillingLine> lines) {
+                                        YearMonth period, LocalDate periodStart, LocalDate periodEnd,
+                                        List<MonthlyBillingLine> lines) {
+        int year = period.getYear();
+        int month = period.getMonthValue();
         billingRepository.findExisting(client.id(), departmentId, year, month).ifPresent(existing -> {
             if (existing.getStatus() != BillingStatus.DRAFT) {
                 throw new IllegalArgumentException(
@@ -457,7 +508,7 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
 
         var billingNumber = buildBillingNumber(client.clientCode(), year, month, departmentId, departmentName);
         var billing = MonthlyBilling.generate(billingNumber, client.id(), departmentId, departmentName, year, month,
-                LocalDate.now(), lines);
+                periodStart, periodEnd, LocalDate.now(), lines);
 
         var pdfBytes = pdf.renderMonthlyBilling(toDocument(billing, client));
         var key = storage.store("billings/" + billingNumber + ".pdf", pdfBytes);
@@ -497,7 +548,7 @@ class MonthlyBillingService implements GenerateMonthlyBillingUseCase, UpdateBill
                 billing.getDepartmentName() == null ? "" : billing.getDepartmentName(),
                 BillingFormats.shortDateYy(billing.getInvoiceDate()),
                 BillingFormats.PAYMENT_TERMS,
-                BillingFormats.periodDescription(billing.getPeriodYear(), billing.getPeriodMonth()),
+                BillingFormats.periodDescription(billing.getPeriodStart(), billing.getPeriodEnd()),
                 BillingFormats.money(billing.getTotal()),
                 BillingFormats.terbilang(billing.getTotal()));
     }

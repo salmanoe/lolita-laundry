@@ -44,10 +44,10 @@ public interface DeliveredOrderQuery {
     Optional<DeliveredOrderDetail> findDeliveredOrder(Long orderId);
 
     /**
-     * Every DELIVERED order for a client whose order date falls in the given month.
+     * Every DELIVERED order for a client whose order date falls in {@code [from, to]} inclusive.
      * Ordered by order date ascending. Empty if none.
      */
-    List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, int year, int month);
+    List<DeliveredOrderDetail> findDeliveredOrders(Long clientId, LocalDate from, LocalDate to);
 
     /**
      * A single <em>billable</em> order (any status except CANCELLED), or empty if the order is
@@ -57,8 +57,13 @@ public interface DeliveredOrderQuery {
     Optional<DeliveredOrderDetail> findBillableOrder(Long orderId);
 
     /**
-     * Every billable (not CANCELLED) order for a client whose order date falls in the given
-     * month, oldest first. Backs the manual billing rebuild.
+     * Every billable (not CANCELLED) order for a client whose order date falls in
+     * {@code [from, to]} inclusive, oldest first. Backs the manual billing rebuild and the
+     * billing re-sync.
+     *
+     * <p>A date range rather than a year+month because a billing period is not necessarily a
+     * calendar month — a client may bill on a cut-off cycle (e.g. 26th → 25th). The caller
+     * resolves the range from the client's billing cycle.
      */
-    List<DeliveredOrderDetail> findBillableOrders(Long clientId, int year, int month);
+    List<DeliveredOrderDetail> findBillableOrders(Long clientId, LocalDate from, LocalDate to);
 }

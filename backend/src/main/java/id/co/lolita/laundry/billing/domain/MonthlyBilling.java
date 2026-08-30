@@ -14,9 +14,14 @@ import java.util.List;
  * every delivered order for the period at order level (one {@link MonthlyBillingLine} per
  * order) into a grand total.
  *
- * <p>For COMBINED clients there is one billing per month ({@code departmentId == null}). For
- * PER_DEPARTMENT clients (e.g. PBS) there is one billing per department per month. The
+ * <p>For COMBINED clients there is one billing per period ({@code departmentId == null}). For
+ * PER_DEPARTMENT clients (e.g. PBS) there is one billing per department per period. The
  * lifecycle is {@code DRAFT → ISSUED → PAID}; only a DRAFT may be regenerated.
+ *
+ * <p>A "period" is the client's {@link BillingCycle} — a calendar month by default, or a cut-off
+ * cycle (e.g. 26th → 25th) for a client that contractually bills that way. Either way it is
+ * identified by {@code periodYear}/{@code periodMonth}, labelled by the month it <em>ends</em> in;
+ * {@code periodStart}/{@code periodEnd} carry the dates it actually covers.
  */
 @Getter
 public class MonthlyBilling {
@@ -28,7 +33,14 @@ public class MonthlyBilling {
     private final String departmentName;  // denormalized for the invoice PDF; null for COMBINED
     private final int periodYear;
     private final int periodMonth;
-    private final LocalDate invoiceDate;
+    // The calendar range the period actually covers, resolved from the client's BillingCycle.
+    // Same freeze rule as the company/bank snapshot below: a DRAFT re-resolves it (see
+    // repositionPeriod), ISSUE freezes it. Stored rather than recomputed at render time so a later
+    // change to the client's cycle can never rewrite the period wording of a document already sent
+    // (the "Perbarui Semua PDF" bulk re-render also touches ISSUED/PAID billings).
+    private LocalDate periodStart;
+    private LocalDate periodEnd;
+    private LocalDate invoiceDate;
     private BigDecimal total;             // recomputed as lines are upserted/removed
     private BillingStatus status;
     private String pdfUrl;                // storage object key — nullable until the PDF is rendered
@@ -47,7 +59,8 @@ public class MonthlyBilling {
     private String bankHolder;
 
     public MonthlyBilling(Long id, String billingNumber, Long clientId, Long departmentId, String departmentName,
-                          int periodYear, int periodMonth, LocalDate invoiceDate, BigDecimal total,
+                          int periodYear, int periodMonth, LocalDate periodStart, LocalDate periodEnd,
+                          LocalDate invoiceDate, BigDecimal total,
                           BillingStatus status, String pdfUrl, String notes, Instant createdAt,
                           List<MonthlyBillingLine> lines) {
         this.id = id;
@@ -57,6 +70,8 @@ public class MonthlyBilling {
         this.departmentName = departmentName;
         this.periodYear = periodYear;
         this.periodMonth = periodMonth;
+        this.periodStart = periodStart;
+        this.periodEnd = periodEnd;
         this.invoiceDate = invoiceDate;
         this.total = total;
         this.status = status;
@@ -74,6 +89,7 @@ public class MonthlyBilling {
      */
     public static MonthlyBilling generate(String billingNumber, Long clientId, Long departmentId,
                                           String departmentName, int periodYear, int periodMonth,
+                                          LocalDate periodStart, LocalDate periodEnd,
                                           LocalDate invoiceDate, List<MonthlyBillingLine> lines) {
         if (lines == null || lines.isEmpty()) {
             throw new IllegalArgumentException("Cannot generate a billing with no delivered orders");
@@ -82,7 +98,8 @@ public class MonthlyBilling {
                 .map(MonthlyBillingLine::subtotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return new MonthlyBilling(null, billingNumber, clientId, departmentId, departmentName, periodYear,
-                periodMonth, invoiceDate, total, BillingStatus.DRAFT, null, null, Instant.now(), lines);
+                periodMonth, periodStart, periodEnd, invoiceDate, total, BillingStatus.DRAFT, null, null,
+                Instant.now(), lines);
     }
 
     /**
@@ -91,10 +108,10 @@ public class MonthlyBilling {
      */
     public static MonthlyBilling startNew(String billingNumber, Long clientId, Long departmentId,
                                           String departmentName, int periodYear, int periodMonth,
-                                          LocalDate invoiceDate) {
+                                          LocalDate periodStart, LocalDate periodEnd, LocalDate invoiceDate) {
         return new MonthlyBilling(null, billingNumber, clientId, departmentId, departmentName, periodYear,
-                periodMonth, invoiceDate, BigDecimal.ZERO, BillingStatus.DRAFT, null, null, Instant.now(),
-                new ArrayList<>());
+                periodMonth, periodStart, periodEnd, invoiceDate, BigDecimal.ZERO, BillingStatus.DRAFT, null,
+                null, Instant.now(), new ArrayList<>());
     }
 
     /**
@@ -117,6 +134,33 @@ public class MonthlyBilling {
                             + "Tunggu order berikutnya pada periode ini atau selesaikan kredit secara manual.");
         }
         this.status = target;
+    }
+
+    /**
+     * Re-resolves the calendar range this period covers from the client's current billing cycle.
+     *
+     * <p>Mirrors how the company/bank snapshot works: a DRAFT follows the client's current
+     * configuration, and ISSUE freezes it. Without this, changing a client's cut-off day would
+     * leave its open DRAFT claiming the old range ("1 – 31 August") while actually accumulating
+     * the new one's orders. Rejected on a frozen billing — that document has been sent.
+     */
+    public void repositionPeriod(LocalDate newStart, LocalDate newEnd) {
+        if (status != BillingStatus.DRAFT) {
+            throw new IllegalStateException(
+                    "Cannot reposition the period of a " + status + " billing " + billingNumber);
+        }
+        this.periodStart = newStart;
+        this.periodEnd = newEnd;
+    }
+
+    /**
+     * Re-stamps the invoice date. A DRAFT is stamped when it is first created — the day the
+     * period's first order arrived — which is fine for a calendar client whose invoice goes out
+     * with the month. For a client on a custom cut-off cycle that date is contractually
+     * meaningful, so the billing is re-stamped with the real issue date when it is ISSUED.
+     */
+    public void stampInvoiceDate(LocalDate issuedOn) {
+        this.invoiceDate = issuedOn;
     }
 
     /**
