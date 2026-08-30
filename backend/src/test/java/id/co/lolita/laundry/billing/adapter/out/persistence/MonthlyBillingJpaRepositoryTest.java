@@ -10,6 +10,7 @@ import org.springframework.dao.OptimisticLockingFailureException;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -35,6 +36,8 @@ class MonthlyBillingJpaRepositoryTest {
         e.setDepartmentId(departmentId);
         e.setPeriodYear(year);
         e.setPeriodMonth(month);
+        e.setPeriodStart(YearMonth.of(year, month).atDay(1));
+        e.setPeriodEnd(YearMonth.of(year, month).atEndOfMonth());
         e.setInvoiceDate(LocalDate.of(year, month, 1));
         e.setTotal(new BigDecimal("10000.00"));
         e.setStatus(BillingStatus.DRAFT);

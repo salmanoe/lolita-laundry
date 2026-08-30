@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,7 +22,7 @@ class MonthlyBillingTest {
 
     private static MonthlyBilling draftWith(String... subtotals) {
         var lines = java.util.Arrays.stream(subtotals).map(s -> line("AYI-20260601-001", s)).toList();
-        return MonthlyBilling.generate("BILL-AYI-202606", 1L, null, null, 2026, 6, LocalDate.now(), lines);
+        return MonthlyBilling.generate("BILL-AYI-202606", 1L, null, null, 2026, 6, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(), LocalDate.now(), lines);
     }
 
     @Test
@@ -36,7 +37,7 @@ class MonthlyBillingTest {
     @Test
     void generate_rejectsEmptyPeriod() {
         assertThatThrownBy(() -> MonthlyBilling.generate(
-                "BILL-AYI-202606", 1L, null, null, 2026, 6, LocalDate.now(), List.of()))
+                "BILL-AYI-202606", 1L, null, null, 2026, 6, YearMonth.of(2026, 6).atDay(1), YearMonth.of(2026, 6).atEndOfMonth(), LocalDate.now(), List.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -90,5 +91,19 @@ class MonthlyBillingTest {
         var billing = draftWith("1000.00");
         billing.attachPdf("billings/BILL-AYI-202606.pdf");
         assertThat(billing.getPdfUrl()).isEqualTo("billings/BILL-AYI-202606.pdf");
+    }
+
+    @Test
+    void repositionPeriod_updatesADraftButIsRejectedOnceIssued() {
+        var billing = draftWith("1000.00");
+
+        billing.repositionPeriod(LocalDate.of(2026, 5, 26), LocalDate.of(2026, 6, 25));
+        assertThat(billing.getPeriodStart()).isEqualTo(LocalDate.of(2026, 5, 26));
+        assertThat(billing.getPeriodEnd()).isEqualTo(LocalDate.of(2026, 6, 25));
+
+        // Once issued the document has been sent — its period must not move.
+        billing.advanceStatus(BillingStatus.ISSUED);
+        assertThatThrownBy(() -> billing.repositionPeriod(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30)))
+                .isInstanceOf(IllegalStateException.class);
     }
 }

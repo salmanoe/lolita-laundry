@@ -7,16 +7,17 @@ public interface ManageClientUseCase {
 
     /**
      * {@code bankAccountId} is optional — null means the client bills to the default bank account.
+     * {@code billingCycleDay} is optional — null means the plain calendar month.
      */
     record CreateClientCommand(
             String name, String clientCode, Long clientTypeId, BillingMode billingMode,
-            String contactPerson, String phone, String address, Long bankAccountId
+            String contactPerson, String phone, String address, Long bankAccountId, Integer billingCycleDay
     ) {
     }
 
     record UpdateClientCommand(
             Long id, String name, Long clientTypeId, BillingMode billingMode,
-            String contactPerson, String phone, String address, Long bankAccountId
+            String contactPerson, String phone, String address, Long bankAccountId, Integer billingCycleDay
     ) {
     }
 

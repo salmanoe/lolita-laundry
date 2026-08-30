@@ -24,7 +24,7 @@ public interface DeliveredOrderGateway {
 
     Optional<DeliveredOrder> findDeliveredOrder(Long orderId);
 
-    List<DeliveredOrder> findDeliveredOrders(Long clientId, int year, int month);
+    List<DeliveredOrder> findDeliveredOrders(Long clientId, LocalDate from, LocalDate to);
 
     /**
      * A single billable (not canceled) order, or empty if unknown/canceled.
@@ -32,7 +32,9 @@ public interface DeliveredOrderGateway {
     Optional<DeliveredOrder> findBillableOrder(Long orderId);
 
     /**
-     * Every billable (not canceled) order for a client in the given month, oldest first.
+     * Every billable (not canceled) order for a client whose order date falls in
+     * {@code [from, to]} inclusive, oldest first. A date range rather than a year+month because
+     * a billing period is not necessarily a calendar month (see {@code BillingCycle}).
      */
-    List<DeliveredOrder> findBillableOrders(Long clientId, int year, int month);
+    List<DeliveredOrder> findBillableOrders(Long clientId, LocalDate from, LocalDate to);
 }

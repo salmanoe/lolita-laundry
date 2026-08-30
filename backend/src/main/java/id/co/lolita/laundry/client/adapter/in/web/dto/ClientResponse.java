@@ -17,6 +17,7 @@ public record ClientResponse(
         String address,
         UUID orderToken,
         Long bankAccountId,
+        Integer billingCycleDay,
         boolean active,
         Instant createdAt
 ) {
@@ -25,7 +26,8 @@ public record ClientResponse(
                 client.getId(), client.getName(), client.getClientCode(),
                 client.getClientTypeId(), client.getBillingMode(),
                 client.getContactPerson(), client.getPhone(), client.getAddress(),
-                client.getOrderToken(), client.getBankAccountId(), client.isActive(), client.getCreatedAt()
+                client.getOrderToken(), client.getBankAccountId(), client.getBillingCycleDay(),
+                client.isActive(), client.getCreatedAt()
         );
     }
 }

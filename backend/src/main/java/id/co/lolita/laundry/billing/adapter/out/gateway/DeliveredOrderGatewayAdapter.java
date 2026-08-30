@@ -5,6 +5,7 @@ import id.co.lolita.laundry.order.domain.port.in.DeliveredOrderQuery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,8 +26,8 @@ class DeliveredOrderGatewayAdapter implements DeliveredOrderGateway {
     }
 
     @Override
-    public List<DeliveredOrder> findDeliveredOrders(Long clientId, int year, int month) {
-        return deliveredOrders.findDeliveredOrders(clientId, year, month).stream()
+    public List<DeliveredOrder> findDeliveredOrders(Long clientId, LocalDate from, LocalDate to) {
+        return deliveredOrders.findDeliveredOrders(clientId, from, to).stream()
                 .map(DeliveredOrderGatewayAdapter::toDeliveredOrder)
                 .toList();
     }
@@ -37,8 +38,8 @@ class DeliveredOrderGatewayAdapter implements DeliveredOrderGateway {
     }
 
     @Override
-    public List<DeliveredOrder> findBillableOrders(Long clientId, int year, int month) {
-        return deliveredOrders.findBillableOrders(clientId, year, month).stream()
+    public List<DeliveredOrder> findBillableOrders(Long clientId, LocalDate from, LocalDate to) {
+        return deliveredOrders.findBillableOrders(clientId, from, to).stream()
                 .map(DeliveredOrderGatewayAdapter::toDeliveredOrder)
                 .toList();
     }

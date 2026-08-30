@@ -18,6 +18,7 @@ interface FormValues {
   phone: string
   address: string
   bankAccountId: string   // '' = use the default account (select values are strings)
+  billingCycleDay: string // '' = plain calendar month (select values are strings)
 }
 
 interface Props {
@@ -29,6 +30,9 @@ interface Props {
 const field =
   'w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500'
 const label = 'block text-xs font-medium text-gray-600 mb-1'
+
+// Capped at 28 (matching the backend CHECK) so a period end never falls on a day February lacks.
+const CUTOFF_DAYS = Array.from({ length: 28 }, (_, i) => i + 1)
 
 export default function ClientFormModal({ open, onClose, client }: Props) {
   const editing = !!client
@@ -60,6 +64,7 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
       phone: client?.phone ?? '',
       address: client?.address ?? '',
       bankAccountId: client?.bankAccountId != null ? String(client.bankAccountId) : '',
+      billingCycleDay: client?.billingCycleDay != null ? String(client.billingCycleDay) : '',
     },
   })
 
@@ -74,6 +79,7 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
         phone: v.phone || null,
         address: v.address || null,
         bankAccountId: v.bankAccountId ? Number(v.bankAccountId) : null,
+        billingCycleDay: v.billingCycleDay ? Number(v.billingCycleDay) : null,
       }
       if (editing) {
         return apiFetch(`/api/clients/${client!.id}`, {
@@ -174,6 +180,25 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
           <p className="mt-1 text-xs text-gray-400">
             Rekening tujuan transfer pada tagihan bulanan klien ini. Tagihan yang sudah diterbitkan
             tidak berubah.
+          </p>
+        </div>
+
+        <div>
+          <label className={label}>Siklus Penagihan</label>
+          <select className={field} {...register('billingCycleDay')}>
+            <option value="">— Bulan kalender (tgl 1 – akhir bulan) —</option>
+            {CUTOFF_DAYS.map((d) => (
+              <option key={d} value={String(d)}>
+                Tutup tanggal {d} (tgl {d + 1} bulan sebelumnya – tgl {d})
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-400">
+            Periode tagihan bulanan klien ini. Contoh: tutup tanggal 25 berarti satu tagihan
+            mencakup order tanggal 26 bulan lalu sampai tanggal 25 bulan ini, dan diberi label
+            bulan berakhirnya. Tagihan yang sudah diterbitkan tidak berubah — setelah mengubah
+            ini, jalankan <span className="font-medium">Sinkron Ulang Tagihan</span> di halaman
+            klien agar order yang sudah masuk pindah ke periode yang benar.
           </p>
         </div>
 

@@ -13,11 +13,13 @@ import java.util.UUID;
 public interface ClientDirectoryQuery {
 
     /**
-     * @param bankAccountId which company bank account this client's invoices are payable to;
-     *                      null means the default account
+     * @param bankAccountId   which company bank account this client's invoices are payable to;
+     *                        null means the default account
+     * @param billingCycleDay the client's monthly billing cut-off day; null means the plain
+     *                        calendar month
      */
     record ClientView(Long id, String name, String clientCode, boolean active, boolean perDepartment,
-                      Long bankAccountId) {
+                      Long bankAccountId, Integer billingCycleDay) {
     }
 
     record DepartmentView(Long id, String name) {

@@ -70,6 +70,30 @@ export const monthName = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
 ]
 
+/** Short Indonesian month names, 1-indexed (shortMonthName[1] === 'Jan'). */
+const shortMonthName = monthName.map((m) => m.slice(0, 3))
+
+/** Formats an ISO date ("2026-08-25") as "25 Agu 2026". */
+export function isoDateLabel(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return `${d} ${shortMonthName[m]} ${y}`
+}
+
+/**
+ * The date range a billing period covers, e.g. "26 Jul – 25 Agu 2026". Returns null for a plain
+ * calendar month (1st → last day), where the "Agustus 2026" label already says everything and a
+ * range would just be noise. Only a client on a billing cut-off cycle gets a range.
+ */
+export function periodRangeLabel(start: string, end: string): string | null {
+  const [, , startDay] = start.split('-').map(Number)
+  if (startDay === 1) return null
+  const [sy, sm, sd] = start.split('-').map(Number)
+  const [ey, em, ed] = end.split('-').map(Number)
+  const from = sy === ey ? `${sd} ${shortMonthName[sm]}` : `${sd} ${shortMonthName[sm]} ${sy}`
+  return `${from} – ${ed} ${shortMonthName[em]} ${ey}`
+}
+
 /**
  * Renders a "YYYY-MM" key as an Indonesian month label. `short` → "Mei 26" (3-letter month +
  * 2-digit year, for chart axes); otherwise "Mei 2026".
