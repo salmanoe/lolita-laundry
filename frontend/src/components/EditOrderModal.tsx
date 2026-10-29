@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useMe } from '../auth/useMe'
 import { indexById, useLookupList } from '../lib/lookups'
 import OrderItemPicker, { toLineItems, type QuantityMap } from './OrderItemPicker'
-import type { Department, Item, Order, OrderFormItem, PriceListEntry } from '../types/api'
+import type { Client, Department, Item, Order, OrderFormItem, PriceListEntry } from '../types/api'
 
 const rupiah = (n: number) =>
   new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n)
@@ -44,6 +44,12 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
     enabled: open,
     queryFn: async () => apiFetch<PriceListEntry[]>(`/api/clients/${clientId}/prices`, { token: await token() }),
   })
+  // Same key as the order detail page's client query, so this is normally served from cache.
+  const clientQ = useQuery({
+    queryKey: ['client', clientId],
+    enabled: open,
+    queryFn: async () => apiFetch<Client>(`/api/clients/${clientId}`, { token: await token() }),
+  })
   const deptsQ = useQuery({
     queryKey: ['departments', clientId],
     enabled: open,
@@ -63,9 +69,10 @@ export default function EditOrderModal({ open, onClose, order, clientId }: Props
     Object.fromEntries(order.lineItems.map((li) => [li.itemId, String(li.quantity)])),
   )
 
-  // Treatment applies only to PER_DEPARTMENT clients (they have departments); the backend rejects
-  // it otherwise. An order already on Treatment is per-department by definition.
-  const treatmentApplicable = (deptsQ.data?.length ?? 0) > 0 || order.pricingMultiplier > 1
+  // Treatment is a per-client setting; the backend rejects setting it on a client without it. An
+  // order already on Treatment keeps the checkbox so it can still be corrected back to Reguler
+  // after the client's setting is turned off.
+  const treatmentApplicable = clientQ.data?.treatmentEnabled === true || order.pricingMultiplier > 1
   // Drive the price preview off the (possibly corrected) Treatment state — the multiplier is either
   // ×1 (Reguler) or ×2 (Treatment).
   const multiplier = treatment ? 2 : 1

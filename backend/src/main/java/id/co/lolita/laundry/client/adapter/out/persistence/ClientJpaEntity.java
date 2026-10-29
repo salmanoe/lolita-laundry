@@ -54,6 +54,10 @@ class ClientJpaEntity {
     @Column(name = "billing_cycle_day")
     private Integer billingCycleDay;
 
+    /** Whether orders may use Treatment (×2) pricing; independent of billing mode. */
+    @Column(name = "treatment_enabled", nullable = false)
+    private boolean treatmentEnabled;
+
     @Column(nullable = false)
     private boolean active = true;
 
@@ -73,6 +77,7 @@ class ClientJpaEntity {
         e.orderToken = client.getOrderToken();
         e.bankAccountId = client.getBankAccountId();
         e.billingCycleDay = client.getBillingCycleDay();
+        e.treatmentEnabled = client.isTreatmentEnabled();
         e.active = client.isActive();
         e.createdAt = client.getCreatedAt();
         return e;
@@ -80,6 +85,7 @@ class ClientJpaEntity {
 
     Client toDomain() {
         return new Client(id, name, clientCode, clientTypeId, billingMode,
-                contactPerson, phone, address, orderToken, bankAccountId, billingCycleDay, active, createdAt);
+                contactPerson, phone, address, orderToken, bankAccountId, billingCycleDay,
+                treatmentEnabled, active, createdAt);
     }
 }

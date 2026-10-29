@@ -9,7 +9,12 @@ import java.util.UUID;
  */
 public interface ClientGateway {
 
-    record ClientSnapshot(Long id, String name, String clientCode, boolean active, boolean perDepartment) {
+    /**
+     * @param treatmentEnabled whether this client's orders may use Treatment (×2) pricing —
+     *                         independent of {@code perDepartment}
+     */
+    record ClientSnapshot(Long id, String name, String clientCode, boolean active, boolean perDepartment,
+                          boolean treatmentEnabled) {
     }
 
     Optional<ClientSnapshot> findByToken(UUID token);

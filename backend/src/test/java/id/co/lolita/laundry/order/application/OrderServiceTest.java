@@ -90,8 +90,13 @@ class OrderServiceTest {
         lenient().when(self.getObject()).thenReturn(service);
     }
 
+    // Treatment follows the billing mode by default — what V20 backfills (PBS keeps Treatment).
     private ClientSnapshot client(boolean perDepartment) {
-        return new ClientSnapshot(1L, "Are You and I", "AYI", true, perDepartment);
+        return client(perDepartment, perDepartment);
+    }
+
+    private ClientSnapshot client(boolean perDepartment, boolean treatmentEnabled) {
+        return new ClientSnapshot(1L, "Are You and I", "AYI", true, perDepartment, treatmentEnabled);
     }
 
     private Order persisted(OrderStatus status) {
@@ -131,7 +136,7 @@ class OrderServiceTest {
     @Test
     void createOrder_rejectsInactiveClient() {
         when(clientGateway.findById(1L))
-                .thenReturn(Optional.of(new ClientSnapshot(1L, "X", "X", false, false)));
+                .thenReturn(Optional.of(new ClientSnapshot(1L, "X", "X", false, false, false)));
 
         assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
                 1L, false, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
@@ -140,8 +145,8 @@ class OrderServiceTest {
     }
 
     @Test
-    void createOrder_rejectsTreatmentForCombinedClient() {
-        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+    void createOrder_rejectsTreatmentWhenClientHasItDisabled() {
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false, false)));
 
         assertThatThrownBy(() -> service.createOrder(new CreateOrderCommand(
                 1L, true, null, "Budi", null, null, List.of(new OrderLineInput(10L, BigDecimal.ONE)))))
@@ -180,6 +185,22 @@ class OrderServiceTest {
         assertThat(result.getPricingMultiplier()).isEqualByComparingTo("2.0");
         assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("30000.00");
         assertThat(result.getLineItems().getFirst().departmentId()).isEqualTo(7L);
+    }
+
+    @Test
+    void createOrder_appliesTreatmentMultiplier_forCombinedClientWithTreatmentEnabled() {
+        // Treatment is a per-client setting, not tied to the billing mode.
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false, true)));
+        stubPricingForItem10();
+        when(orderRepository.findMaxOrderNumberByPrefix(any())).thenReturn(Optional.empty());
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.createOrder(new CreateOrderCommand(
+                1L, true, null, "Budi", null, null, List.of(new OrderLineInput(10L, new BigDecimal("3")))));
+
+        assertThat(result.getPricingMultiplier()).isEqualByComparingTo("2.0");
+        assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("30000.00");
+        assertThat(result.getLineItems().getFirst().departmentId()).isNull();   // COMBINED client
     }
 
     @Test
@@ -509,7 +530,7 @@ class OrderServiceTest {
 
     @Test
     void updateOrder_treatmentCorrection_reprisesLines_andFiresBillingSync() {
-        // SUPER_ADMIN flips Reguler → Treatment on a per-department client's RECEIVED order.
+        // SUPER_ADMIN flips Reguler → Treatment on a Treatment-enabled client's RECEIVED order.
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
         when(clientGateway.findById(1L)).thenReturn(Optional.of(client(true)));
         when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(false);
@@ -540,9 +561,29 @@ class OrderServiceTest {
     }
 
     @Test
-    void updateOrder_rejectsTreatmentForCombinedClient() {
+    void updateOrder_treatmentCorrectionToReguler_allowedAfterClientDisablesTreatment() {
+        // The client's flag was turned off after a ×2 order was taken: clearing Treatment must
+        // still work so SUPER_ADMIN can correct it back to Reguler.
+        var treatmentOrder = new Order(99L, "AYI-20260101-001", 1L, LocalDate.now(), null, OrderStatus.RECEIVED,
+                new BigDecimal("2.0"), "Staff", null, null, Instant.now(),
+                List.of(new OrderLineItem(
+                        500L, 10L, BigDecimal.ONE, new BigDecimal("5000"), new BigDecimal("10000.00"), null)));
+        when(orderRepository.findById(99L)).thenReturn(Optional.of(treatmentOrder));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false, false)));
+        when(billingStatus.isOrderOnIssuedBilling(99L)).thenReturn(false);
+        when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.updateOrder(new UpdateOrderUseCase.UpdateOrderCommand(
+                99L, null, false, null, null, null));
+
+        assertThat(result.getPricingMultiplier()).isEqualByComparingTo("1");
+        assertThat(result.getLineItems().getFirst().subtotal()).isEqualByComparingTo("5000.00");
+    }
+
+    @Test
+    void updateOrder_rejectsTreatmentWhenClientHasItDisabled() {
         when(orderRepository.findById(99L)).thenReturn(Optional.of(persisted(OrderStatus.RECEIVED)));
-        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false)));
+        when(clientGateway.findById(1L)).thenReturn(Optional.of(client(false, false)));
 
         assertThatThrownBy(() -> service.updateOrder(new UpdateOrderUseCase.UpdateOrderCommand(
                 99L, null, true, null, null, null)))

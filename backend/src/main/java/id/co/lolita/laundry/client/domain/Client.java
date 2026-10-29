@@ -19,6 +19,10 @@ import java.util.UUID;
  * means the plain calendar month (1st through the last day). A client with a contractual cut-off
  * (e.g. "invoice every 25th") carries that day, and its billing period then runs from the day
  * after the cut-off in the previous month through the cut-off itself.
+ *
+ * <p>{@code treatmentEnabled} says whether this client's orders may use Treatment pricing (the
+ * whole-order ×2 multiplier). It is independent of {@code billingMode}: Treatment is a service the
+ * client buys, not a property of how it is invoiced.
  */
 @Getter
 public class Client {
@@ -34,13 +38,14 @@ public class Client {
     private UUID orderToken;
     private Long bankAccountId;       // FK → bank_accounts; null = bill to the default account
     private Integer billingCycleDay;  // monthly cut-off day; null = plain calendar month
+    private boolean treatmentEnabled; // orders may use Treatment (×2) pricing
     private boolean active;
     private final Instant createdAt;
 
     public Client(
             Long id, String name, String clientCode, Long clientTypeId, BillingMode billingMode,
             String contactPerson, String phone, String address, UUID orderToken, Long bankAccountId,
-            Integer billingCycleDay, boolean active, Instant createdAt
+            Integer billingCycleDay, boolean treatmentEnabled, boolean active, Instant createdAt
     ) {
         this.id = id;
         this.name = name;
@@ -53,13 +58,14 @@ public class Client {
         this.orderToken = orderToken;
         this.bankAccountId = bankAccountId;
         this.billingCycleDay = billingCycleDay;
+        this.treatmentEnabled = treatmentEnabled;
         this.active = active;
         this.createdAt = createdAt;
     }
 
     public void update(String name, Long clientTypeId, BillingMode billingMode,
                        String contactPerson, String phone, String address, Long bankAccountId,
-                       Integer billingCycleDay) {
+                       Integer billingCycleDay, boolean treatmentEnabled) {
         this.name = name;
         this.clientTypeId = clientTypeId;
         this.billingMode = billingMode;
@@ -68,6 +74,7 @@ public class Client {
         this.address = address;
         this.bankAccountId = bankAccountId;
         this.billingCycleDay = billingCycleDay;
+        this.treatmentEnabled = treatmentEnabled;
     }
 
     /**

@@ -100,7 +100,7 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
                 .toList();
 
         return new OrderFormView(client.id(), client.name(), client.clientCode(),
-                client.perDepartment(), client.perDepartment(), departments, items);
+                client.perDepartment(), client.treatmentEnabled(), departments, items);
     }
 
     // ── CreateOrderUseCase ──
@@ -166,8 +166,10 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
         var client = clientGateway.findById(order.getClientId());
         boolean perDepartment = client.map(ClientSnapshot::perDepartment).orElse(false);
 
-        // SUPER_ADMIN Treatment correction. resolveMultiplier enforces the PER_DEPARTMENT-only gate
-        // (Treatment on a COMBINED client is rejected). null = leave the flag unchanged.
+        // SUPER_ADMIN Treatment correction. resolveMultiplier enforces the per-client gate (setting
+        // Treatment on a client without it is rejected; clearing it is always allowed, so a ×2 order
+        // can still be corrected to Reguler after the client's flag is turned off). null = leave
+        // the flag unchanged.
         BigDecimal newMultiplier = command.treatment() == null ? null
                 : client.map(c -> resolveMultiplier(c, command.treatment()))
                 .orElseThrow(() -> new IllegalArgumentException("Client not found for order " + order.getId()));
@@ -539,8 +541,8 @@ class OrderService implements GetOrderFormUseCase, CreateOrderUseCase,
         if (!treatment) {
             return BigDecimal.ONE;
         }
-        if (!client.perDepartment()) {
-            throw new IllegalArgumentException("Treatment pricing is only available for per-department clients");
+        if (!client.treatmentEnabled()) {
+            throw new IllegalArgumentException("Treatment tidak tersedia untuk klien ini.");
         }
         return TREATMENT_MULTIPLIER;
     }
