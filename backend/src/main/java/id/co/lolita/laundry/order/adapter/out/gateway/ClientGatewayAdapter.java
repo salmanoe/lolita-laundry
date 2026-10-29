@@ -29,6 +29,7 @@ class ClientGatewayAdapter implements ClientGateway {
     }
 
     private static ClientSnapshot toSnapshot(ClientDirectoryQuery.ClientView v) {
-        return new ClientSnapshot(v.id(), v.name(), v.clientCode(), v.active(), v.perDepartment());
+        return new ClientSnapshot(v.id(), v.name(), v.clientCode(), v.active(), v.perDepartment(),
+                v.treatmentEnabled());
     }
 }

@@ -19,6 +19,7 @@ interface FormValues {
   address: string
   bankAccountId: string   // '' = use the default account (select values are strings)
   billingCycleDay: string // '' = plain calendar month (select values are strings)
+  treatmentEnabled: boolean
 }
 
 interface Props {
@@ -65,6 +66,7 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
       address: client?.address ?? '',
       bankAccountId: client?.bankAccountId != null ? String(client.bankAccountId) : '',
       billingCycleDay: client?.billingCycleDay != null ? String(client.billingCycleDay) : '',
+      treatmentEnabled: client?.treatmentEnabled ?? false,
     },
   })
 
@@ -80,6 +82,7 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
         address: v.address || null,
         bankAccountId: v.bankAccountId ? Number(v.bankAccountId) : null,
         billingCycleDay: v.billingCycleDay ? Number(v.billingCycleDay) : null,
+        treatmentEnabled: v.treatmentEnabled,
       }
       if (editing) {
         return apiFetch(`/api/clients/${client!.id}`, {
@@ -201,6 +204,21 @@ export default function ClientFormModal({ open, onClose, client }: Props) {
             klien agar order yang sudah masuk pindah ke periode yang benar.
           </p>
         </div>
+
+        <label className="flex items-start gap-2 rounded-lg bg-gray-50 px-3 py-2">
+          <input
+            type="checkbox"
+            {...register('treatmentEnabled')}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+          />
+          <span>
+            <span className="block text-sm font-medium text-gray-700">Treatment tersedia (harga ×2)</span>
+            <span className="mt-0.5 block text-[11px] text-gray-400">
+              Jika aktif, order klien ini dapat ditandai Treatment (harga seluruh item ×2). Mematikannya
+              tidak mengubah order yang sudah ada.
+            </span>
+          </span>
+        </label>
 
         <ModalFormActions onClose={onClose} error={mutation.error} isPending={mutation.isPending} />
       </form>

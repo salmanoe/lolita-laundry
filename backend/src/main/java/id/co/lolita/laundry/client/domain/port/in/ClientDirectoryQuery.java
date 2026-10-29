@@ -17,9 +17,11 @@ public interface ClientDirectoryQuery {
      *                        null means the default account
      * @param billingCycleDay the client's monthly billing cut-off day; null means the plain
      *                        calendar month
+     * @param treatmentEnabled whether the client's orders may use Treatment (×2) pricing —
+     *                        independent of {@code perDepartment}
      */
     record ClientView(Long id, String name, String clientCode, boolean active, boolean perDepartment,
-                      Long bankAccountId, Integer billingCycleDay) {
+                      Long bankAccountId, Integer billingCycleDay, boolean treatmentEnabled) {
     }
 
     record DepartmentView(Long id, String name) {

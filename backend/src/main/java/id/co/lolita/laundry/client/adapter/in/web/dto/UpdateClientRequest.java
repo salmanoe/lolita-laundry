@@ -18,6 +18,8 @@ public record UpdateClientRequest(
         Long bankAccountId,
         /* Monthly billing cut-off day. Null = plain calendar month. Capped at 28 so the period
            end never has to be clamped to a short February. */
-        @Min(1) @Max(28) Integer billingCycleDay
+        @Min(1) @Max(28) Integer billingCycleDay,
+        /* Whether orders may use Treatment (×2) pricing. Null = off on create, unchanged on update. */
+        Boolean treatmentEnabled
 ) {
 }
