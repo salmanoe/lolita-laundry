@@ -31,7 +31,8 @@ public class Order {
     // Not final: SUPER_ADMIN may correct the Treatment flag via edit() (a whole-order pricing
     // correction). Changing it re-prices every existing line — the multiplier is baked into each
     // OrderLineItem.subtotal — so a correction reshuffles the monthly billing exactly like a
-    // quantity edit does. 1.0 Reguler, 2.0 Treatment (PBS).
+    // quantity edit does. 1.0 Reguler, 2.0 Treatment (clients with
+    // Treatment enabled).
     private BigDecimal pricingMultiplier;
     private final String submittedByName;
     private String notes;

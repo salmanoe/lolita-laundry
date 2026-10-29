@@ -62,7 +62,7 @@ class ClientController {
         var command = new CreateClientCommand(
                 request.name(), request.clientCode(), request.clientTypeId(), request.billingMode(),
                 request.contactPerson(), request.phone(), request.address(), request.bankAccountId(),
-                request.billingCycleDay()
+                request.billingCycleDay(), request.treatmentEnabled()
         );
         return ClientResponse.from(manageClient.createClient(command));
     }
@@ -73,7 +73,7 @@ class ClientController {
         var command = new UpdateClientCommand(
                 id, request.name(), request.clientTypeId(), request.billingMode(),
                 request.contactPerson(), request.phone(), request.address(), request.bankAccountId(),
-                request.billingCycleDay()
+                request.billingCycleDay(), request.treatmentEnabled()
         );
         return ClientResponse.from(manageClient.updateClient(command));
     }

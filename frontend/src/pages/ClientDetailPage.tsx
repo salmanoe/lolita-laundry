@@ -162,6 +162,10 @@ export default function ClientDetailPage() {
               : `Tutup tgl ${client.billingCycleDay} (tgl ${client.billingCycleDay + 1} – tgl ${client.billingCycleDay})`
           }
         />
+        <Info
+          label="Treatment (×2)"
+          value={client.treatmentEnabled ? 'Tersedia' : <span className="text-gray-400">Tidak tersedia</span>}
+        />
         <Info label="Token Order" value={<span className="font-mono text-xs">{client.orderToken}</span>} />
       </dl>
 

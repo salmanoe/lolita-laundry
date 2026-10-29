@@ -18,6 +18,7 @@ public record ClientResponse(
         UUID orderToken,
         Long bankAccountId,
         Integer billingCycleDay,
+        boolean treatmentEnabled,
         boolean active,
         Instant createdAt
 ) {
@@ -27,6 +28,7 @@ public record ClientResponse(
                 client.getClientTypeId(), client.getBillingMode(),
                 client.getContactPerson(), client.getPhone(), client.getAddress(),
                 client.getOrderToken(), client.getBankAccountId(), client.getBillingCycleDay(),
+                client.isTreatmentEnabled(),
                 client.isActive(), client.getCreatedAt()
         );
     }

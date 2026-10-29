@@ -112,6 +112,8 @@ export interface Client {
    * period runs from the 26th of the previous month through the 25th, labelled by its end month.
    */
   billingCycleDay: number | null
+  /** Whether this client's orders may use Treatment (whole-order ×2); independent of billingMode. */
+  treatmentEnabled: boolean
   active:        boolean
   createdAt:     string   // ISO-8601 instant string
 }
